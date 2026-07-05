@@ -1,0 +1,3091 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Урок 1: Обнаружение вражеского БПЛА | Профессиональная серия</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        :root {
+            --bg-dark: rgba(10, 14, 26, 0.85);
+            --accent-cyan: #38bdf8;
+            --accent-green: #22c55e;
+            --accent-red: #ef4444;
+            --accent-orange: #f59e0b;
+            --accent-gold: #fbbf24;
+            --accent-purple: #818cf8;
+            --accent-pink: #ec4899;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #1a1a2e;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: var(--text-primary);
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            touch-action: none;
+        }
+
+        #gameCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            display: block;
+            cursor: crosshair;
+            touch-action: none;
+        }
+
+        .ui-layer {
+            position: fixed;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .ui-layer * {
+            pointer-events: auto;
+        }
+
+        .top-bar {
+            top: 0; left: 0; right: 0;
+            padding: 6px 10px;
+            background: var(--bg-dark);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border-bottom: 1px solid rgba(56, 189, 248, 0.3);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            z-index: 100;
+            height: 44px;
+            flex-wrap: nowrap;
+            gap: 5px;
+        }
+
+        .badge {
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 0.6rem;
+            font-weight: bold;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .lesson-badge {
+            background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple));
+            box-shadow: 0 0 15px rgba(56, 189, 248, 0.5);
+        }
+
+        .support-badge {
+            background: linear-gradient(90deg, var(--accent-gold), var(--accent-orange));
+            color: #1a1a1a;
+            box-shadow: 0 0 15px rgba(251, 191, 36, 0.5);
+        }
+
+        .title {
+            flex-grow: 1;
+            text-align: center;
+            font-size: 0.7rem;
+            font-weight: bold;
+            background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            padding: 0 5px;
+        }
+
+        .hud-corner {
+            background: var(--bg-dark);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            border-radius: 8px;
+            padding: 6px 10px;
+            font-size: 0.75rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            min-width: 130px;
+        }
+
+        .hud-tl { top: 52px; left: 10px; }
+        .hud-tr { top: 52px; right: 10px; width: 140px; z-index: 20; }
+        .hud-bl { bottom: 200px; left: 10px; }
+
+        .hud-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 2px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .hud-row:last-child { border-bottom: none; }
+
+        .hud-label { color: var(--text-secondary); font-size: 0.7rem; }
+        .hud-value { color: var(--accent-cyan); font-weight: bold; font-size: 0.75rem; }
+        .hud-value.red { color: var(--accent-red); }
+        .hud-value.green { color: var(--accent-green); }
+        .hud-value.orange { color: var(--accent-orange); }
+        .hud-value.gold { color: var(--accent-gold); }
+
+        .signal-bar-container {
+            bottom: 140px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-dark);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            border-radius: 10px;
+            padding: 6px 15px;
+            min-width: 280px;
+            max-width: 90vw;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            z-index: 50;
+        }
+
+        .signal-bar {
+            height: 6px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 4px;
+        }
+
+        .signal-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-green), var(--accent-orange), var(--accent-red));
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .left-panel {
+            bottom: 200px;
+            left: 10px;
+            width: 180px;
+            background: rgba(10, 14, 26, 0.75);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            border-radius: 10px;
+            padding: 8px 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            z-index: 50;
+            font-size: 0.65rem;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .panel-section {
+            margin-bottom: 6px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid rgba(56, 189, 248, 0.1);
+        }
+
+        .panel-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+
+        .panel-title {
+            color: var(--accent-cyan);
+            font-size: 0.6rem;
+            font-weight: bold;
+            margin-bottom: 3px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .control-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1px 0;
+            font-size: 0.6rem;
+        }
+
+        .key {
+            background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(129, 140, 248, 0.2));
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-weight: bold;
+            color: var(--accent-cyan);
+            font-family: monospace;
+            font-size: 0.55rem;
+        }
+
+        .crosshair {
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 70px;
+            height: 70px;
+            z-index: 30;
+        }
+
+        .crosshair::before, .crosshair::after {
+            content: '';
+            position: absolute;
+            background: var(--accent-cyan);
+            box-shadow: 0 0 5px var(--accent-cyan);
+        }
+
+        .crosshair::before {
+            width: 2px;
+            height: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .crosshair::after {
+            height: 2px;
+            width: 100%;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        .crosshair-circle {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 35px;
+            height: 35px;
+            border: 2px solid var(--accent-cyan);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--accent-cyan);
+        }
+
+        .crosshair-dot {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 4px;
+            height: 4px;
+            background: var(--accent-cyan);
+            border-radius: 50%;
+            box-shadow: 0 0 5px var(--accent-cyan);
+        }
+
+        .lock-ring {
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90px;
+            height: 90px;
+            display: none;
+            z-index: 25;
+        }
+
+        .lock-ring.active { display: block; }
+
+        .lock-ring svg {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+
+        .lock-ring circle {
+            fill: none;
+            stroke-width: 3;
+            stroke-linecap: round;
+        }
+
+        .lock-ring .bg { stroke: rgba(34, 197, 94, 0.2); }
+        .lock-ring .fg { 
+            stroke: var(--accent-green);
+            stroke-dasharray: 283;
+            stroke-dashoffset: 283;
+            transition: stroke-dashoffset 0.1s;
+            filter: drop-shadow(0 0 5px var(--accent-green));
+        }
+
+        .thermal-overlay {
+            inset: 0;
+            background: linear-gradient(135deg, rgba(255, 80, 0, 0.2), rgba(255, 180, 0, 0.15));
+            opacity: 0;
+            transition: opacity 0.3s;
+            mix-blend-mode: screen;
+            z-index: 15;
+            pointer-events: none;
+        }
+
+        .thermal-overlay.active { opacity: 1; }
+
+        .minimap {
+            bottom: 200px;
+            right: 10px;
+            width: 130px;
+            height: 130px;
+            background: var(--bg-dark);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            z-index: 50;
+        }
+
+        .minimap canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .minimap-title {
+            position: absolute;
+            top: 3px;
+            left: 6px;
+            font-size: 0.55rem;
+            color: var(--accent-cyan);
+            font-weight: bold;
+            text-shadow: 0 0 3px rgba(0,0,0,1);
+            z-index: 1;
+        }
+
+        .warning {
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(239, 68, 68, 0.3);
+            border: 2px solid var(--accent-red);
+            padding: 15px 30px;
+            border-radius: 10px;
+            color: var(--accent-red);
+            font-weight: bold;
+            font-size: 1.2rem;
+            display: none;
+            animation: pulse 1s ease-in-out infinite;
+            text-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
+            z-index: 40;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; box-shadow: 0 0 20px var(--accent-red); }
+            50% { opacity: 0.6; box-shadow: 0 0 40px var(--accent-red); }
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            z-index: 200;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            padding: 20px;
+        }
+
+        .modal.active { 
+            display: flex;
+            pointer-events: auto;
+        }
+
+        .modal-content {
+            background: var(--bg-dark);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(56, 189, 248, 0.5);
+            border-radius: 20px;
+            padding: 30px;
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.7), 0 0 40px rgba(56, 189, 248, 0.3);
+            animation: modalIn 0.5s ease;
+            pointer-events: auto;
+        }
+
+        @keyframes modalIn {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .modal h2 {
+            font-size: 1.8rem;
+            margin-bottom: 12px;
+            background: linear-gradient(90deg, var(--accent-gold), var(--accent-orange));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .modal p {
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            line-height: 1.5;
+            font-size: 0.9rem;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .stat-item {
+            background: rgba(56, 189, 248, 0.1);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 10px;
+            padding: 10px;
+        }
+
+        .stat-label {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            margin-bottom: 3px;
+            text-transform: uppercase;
+        }
+
+        .stat-value {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: var(--accent-cyan);
+        }
+
+        .btn-glass {
+            position: relative;
+            display: inline-block;
+            padding: 12px 24px;
+            text-decoration: none;
+            text-align: center;
+            font-weight: bold;
+            font-size: 0.95rem;
+            color: white;
+            border-radius: 14px;
+            cursor: pointer;
+            overflow: hidden;
+            isolation: isolate;
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            box-shadow: 
+                inset 0 2px 0 rgba(255, 255, 255, 0.4),
+                inset 0 -3px 8px rgba(0, 0, 0, 0.3),
+                0 6px 15px rgba(56, 189, 248, 0.4),
+                0 3px 6px rgba(0, 0, 0, 0.4);
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+            margin-top: 10px;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .btn-glass::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(
+                120deg,
+                rgba(56, 189, 248, 0.7) 0%,
+                rgba(129, 140, 248, 0.7) 25%,
+                rgba(236, 72, 153, 0.7) 50%,
+                rgba(129, 140, 248, 0.7) 75%,
+                rgba(56, 189, 248, 0.7) 100%
+            );
+            background-size: 300% 100%;
+            opacity: 0.8;
+            z-index: -1;
+            animation: gradientShift 4s linear infinite;
+        }
+
+        .btn-glass::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -100%;
+            width: 50%;
+            height: 200%;
+            background: linear-gradient(
+                90deg,
+                transparent,
+                rgba(255, 255, 255, 0.5),
+                transparent
+            );
+            transform: skewX(-25deg);
+            transition: left 0.6s;
+        }
+
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 300% 50%; }
+        }
+
+        .btn-glass:hover, .btn-glass:active {
+            transform: translateY(-4px) scale(1.03);
+            box-shadow: 
+                inset 0 2px 0 rgba(255, 255, 255, 0.6),
+                inset 0 -3px 8px rgba(0, 0, 0, 0.3),
+                0 10px 30px rgba(56, 189, 248, 0.7),
+                0 5px 15px rgba(129, 140, 248, 0.5),
+                0 0 40px rgba(236, 72, 153, 0.4);
+            border-color: rgba(255, 255, 255, 0.6);
+        }
+
+        .btn-glass:hover::before, .btn-glass:active::before {
+            opacity: 1;
+        }
+
+        .btn-glass:hover::after, .btn-glass:active::after {
+            left: 150%;
+        }
+
+        .btn-glass:active {
+            transform: translateY(-2px) scale(1.01);
+        }
+
+        .btn-start {
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.3), rgba(56, 189, 248, 0.3));
+            border-color: rgba(34, 197, 94, 0.6);
+        }
+
+        .btn-start::before {
+            background: linear-gradient(
+                120deg,
+                rgba(34, 197, 94, 0.7) 0%,
+                rgba(56, 189, 248, 0.7) 50%,
+                rgba(34, 197, 94, 0.7) 100%
+            );
+            background-size: 200% 100%;
+            animation: gradientShift 3s linear infinite;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(245, 158, 11, 0.3));
+            border-color: rgba(239, 68, 68, 0.6);
+        }
+
+        .btn-danger::before {
+            background: linear-gradient(
+                120deg,
+                rgba(239, 68, 68, 0.7) 0%,
+                rgba(245, 158, 11, 0.7) 50%,
+                rgba(239, 68, 68, 0.7) 100%
+            );
+            background-size: 200% 100%;
+            animation: gradientShift 3s linear infinite;
+        }
+
+        footer {
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 4px 15px;
+            background: linear-gradient(90deg, rgba(251, 191, 36, 0.15), rgba(245, 158, 11, 0.15));
+            border-top: 2px solid rgba(251, 191, 36, 0.4);
+            text-align: center;
+            z-index: 100;
+        }
+
+        .support-text {
+            color: var(--accent-gold);
+            font-size: 0.7rem;
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
+        }
+
+        .start-screen {
+            position: fixed;
+            inset: 0;
+            background: rgba(10, 14, 26, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            z-index: 300;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            text-align: center;
+            pointer-events: auto;
+            overflow-y: auto;
+        }
+
+        .coat-of-arms-container {
+            margin-bottom: 20px;
+            position: relative;
+            animation: float 6s ease-in-out infinite;
+        }
+
+        .coat-of-arms {
+            width: 160px;
+            height: 160px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 3px solid rgba(251, 191, 36, 0.5);
+            box-shadow: 
+                inset 0 2px 10px rgba(255, 255, 255, 0.2),
+                inset 0 -2px 10px rgba(0, 0, 0, 0.3),
+                0 10px 40px rgba(251, 191, 36, 0.4),
+                0 0 60px rgba(56, 189, 248, 0.3);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .coat-of-arms::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(
+                120deg,
+                rgba(251, 191, 36, 0.3) 0%,
+                rgba(255, 255, 255, 0.2) 25%,
+                rgba(251, 191, 36, 0.3) 50%,
+                rgba(255, 255, 255, 0.2) 75%,
+                rgba(251, 191, 36, 0.3) 100%
+            );
+            background-size: 300% 100%;
+            animation: shimmer 5s linear infinite;
+            z-index: 1;
+        }
+
+        .coat-of-arms img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            padding: 10px;
+            position: relative;
+            z-index: 2;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 300% 50%; }
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .governor-support-text {
+            font-size: 1.3rem;
+            font-weight: bold;
+            background: linear-gradient(
+                90deg,
+                var(--accent-gold) 0%,
+                var(--accent-orange) 25%,
+                var(--accent-gold) 50%,
+                var(--accent-orange) 75%,
+                var(--accent-gold) 100%
+            );
+            background-size: 300% 100%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: textShimmer 5s linear infinite;
+            text-shadow: 
+                0 0 20px rgba(251, 191, 36, 0.5),
+                0 0 40px rgba(251, 191, 36, 0.3);
+            margin-bottom: 25px;
+            padding: 15px 30px;
+            background-clip: text;
+            position: relative;
+            display: inline-block;
+        }
+
+        .governor-support-text::before {
+            content: '';
+            position: absolute;
+            inset: -5px;
+            background: linear-gradient(
+                120deg,
+                rgba(251, 191, 36, 0.1) 0%,
+                rgba(255, 255, 255, 0.05) 50%,
+                rgba(251, 191, 36, 0.1) 100%
+            );
+            border-radius: 15px;
+            z-index: -1;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+
+        @keyframes textShimmer {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 300% 50%; }
+        }
+
+        .start-screen h1 {
+            font-size: 1.8rem;
+            margin-bottom: 12px;
+            background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .start-screen .subtitle {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 20px;
+        }
+
+        .mission-brief {
+            background: rgba(56, 189, 248, 0.1);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 12px;
+            padding: 15px 20px;
+            max-width: 600px;
+            width: 100%;
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        .mission-brief h3 {
+            color: var(--accent-gold);
+            margin-bottom: 8px;
+            font-size: 1rem;
+        }
+
+        .mission-brief p {
+            color: var(--text-secondary);
+            line-height: 1.5;
+            margin-bottom: 6px;
+            font-size: 0.85rem;
+        }
+
+        .mission-brief strong {
+            color: var(--accent-cyan);
+        }
+
+        .compass {
+            top: 52px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-dark);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            border-radius: 10px;
+            padding: 3px 12px;
+            font-family: monospace;
+            color: var(--accent-cyan);
+            font-size: 0.75rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            z-index: 50;
+        }
+
+        .control-hint {
+            position: fixed;
+            bottom: 90px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(10, 14, 26, 0.9);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            border-radius: 10px;
+            padding: 5px 14px;
+            color: var(--accent-cyan);
+            font-size: 0.7rem;
+            z-index: 50;
+            pointer-events: none;
+            animation: fadeInOut 3s ease-in-out;
+            opacity: 0;
+            white-space: nowrap;
+            max-width: 90vw;
+        }
+
+        .control-hint.show {
+            opacity: 1;
+        }
+
+        @keyframes fadeInOut {
+            0% { opacity: 0; }
+            20% { opacity: 1; }
+            80% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+
+        .coord-notification {
+            position: fixed;
+            top: 120px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(34, 197, 94, 0.9);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 2px solid var(--accent-green);
+            border-radius: 10px;
+            padding: 12px 25px;
+            color: white;
+            font-weight: bold;
+            font-size: 1rem;
+            z-index: 150;
+            display: none;
+            box-shadow: 0 0 30px rgba(34, 197, 94, 0.8);
+            animation: slideIn 0.5s ease;
+            max-width: 90vw;
+            text-align: center;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(-50%) translateY(-50px); opacity: 0; }
+            to { transform: translateX(-50%) translateY(0); opacity: 1; }
+        }
+
+        .enemy-indicator {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 55px;
+            height: 55px;
+            border: 3px solid var(--accent-red);
+            border-radius: 50%;
+            background: rgba(239, 68, 68, 0.1);
+            box-shadow: 0 0 30px rgba(239, 68, 68, 0.3);
+            display: none;
+            z-index: 20;
+            animation: pulse 1s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        .enemy-indicator::after {
+            content: '⚠';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.8rem;
+        }
+
+        .drone-status {
+            position: fixed;
+            top: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(10, 14, 26, 0.9);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 2px solid var(--accent-orange);
+            border-radius: 10px;
+            padding: 6px 16px;
+            color: var(--accent-orange);
+            font-weight: bold;
+            font-size: 0.85rem;
+            z-index: 45;
+            display: none;
+            text-align: center;
+            pointer-events: none;
+        }
+
+        .drone-status.active {
+            display: block;
+            animation: pulse 1s ease-in-out infinite;
+        }
+
+        .drone-status .countdown {
+            font-size: 1.3rem;
+            color: var(--accent-red);
+        }
+
+        .wind-indicator {
+            position: fixed;
+            top: 120px;
+            right: 10px;
+            background: var(--bg-dark);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            border-radius: 10px;
+            padding: 8px 12px;
+            font-size: 0.75rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            z-index: 50;
+            min-width: 140px;
+        }
+
+        .wind-direction {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 5px;
+        }
+
+        .wind-arrow {
+            font-size: 1.2rem;
+            transition: transform 0.3s;
+        }
+
+        .wind-strength {
+            color: var(--accent-orange);
+            font-weight: bold;
+        }
+
+        .sound-toggle {
+            position: fixed;
+            top: 52px;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--bg-dark);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 55;
+            font-size: 1.2rem;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        #musicToggle {
+            left: calc(50% - 50px);
+        }
+
+        #soundToggle {
+            left: calc(50% + 10px);
+        }
+
+        .sound-toggle:hover {
+            transform: scale(1.1);
+            border-color: rgba(56, 189, 248, 0.8);
+            box-shadow: 0 0 20px rgba(56, 189, 248, 0.5);
+        }
+
+        .sound-toggle.muted {
+            border-color: rgba(239, 68, 68, 0.5);
+            opacity: 0.7;
+        }
+
+        #musicToggle.playing {
+            border-color: rgba(34, 197, 94, 0.8);
+            box-shadow: 0 0 20px rgba(34, 197, 94, 0.5);
+            animation: pulseMusic 2s ease-in-out infinite;
+        }
+
+        @keyframes pulseMusic {
+            0%, 100% { box-shadow: 0 0 15px rgba(34, 197, 94, 0.5); }
+            50% { box-shadow: 0 0 25px rgba(34, 197, 94, 0.8); }
+        }
+
+        .touch-controls {
+            position: fixed;
+            bottom: 10px;
+            left: 0;
+            right: 0;
+            z-index: 60;
+            display: none;
+            padding: 0 10px;
+            pointer-events: none;
+        }
+
+        .touch-controls.active {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+        }
+
+        .touch-controls > * {
+            pointer-events: auto;
+        }
+
+        .joystick-container {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            flex-shrink: 0;
+        }
+
+        .joystick-base {
+            position: absolute;
+            inset: 0;
+            background: rgba(10, 14, 26, 0.7);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 2px solid rgba(56, 189, 248, 0.4);
+            border-radius: 50%;
+            box-shadow: 
+                inset 0 2px 5px rgba(255, 255, 255, 0.2),
+                inset 0 -3px 8px rgba(0, 0, 0, 0.3),
+                0 4px 15px rgba(56, 189, 248, 0.3);
+        }
+
+        .joystick-stick {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, rgba(56, 189, 248, 0.6), rgba(129, 140, 248, 0.6));
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            border-radius: 50%;
+            box-shadow: 
+                inset 0 2px 0 rgba(255, 255, 255, 0.5),
+                inset 0 -2px 5px rgba(0, 0, 0, 0.3),
+                0 4px 15px rgba(56, 189, 248, 0.5);
+            transition: transform 0.1s;
+        }
+
+        .action-buttons {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            max-width: 200px;
+        }
+
+        .touch-btn {
+            position: relative;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.7rem;
+            color: white;
+            cursor: pointer;
+            overflow: hidden;
+            isolation: isolate;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 
+                inset 0 2px 0 rgba(255, 255, 255, 0.3),
+                inset 0 -2px 5px rgba(0, 0, 0, 0.2),
+                0 4px 10px rgba(56, 189, 248, 0.3);
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .touch-btn::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(
+                120deg,
+                rgba(56, 189, 248, 0.6) 0%,
+                rgba(129, 140, 248, 0.6) 25%,
+                rgba(236, 72, 153, 0.6) 50%,
+                rgba(129, 140, 248, 0.6) 75%,
+                rgba(56, 189, 248, 0.6) 100%
+            );
+            background-size: 300% 100%;
+            opacity: 0.7;
+            z-index: -1;
+            animation: gradientShift 4s linear infinite;
+            border-radius: 50%;
+        }
+
+        .touch-btn:active {
+            transform: scale(0.92);
+            box-shadow: 
+                inset 0 2px 0 rgba(255, 255, 255, 0.5),
+                inset 0 -2px 5px rgba(0, 0, 0, 0.3),
+                0 2px 8px rgba(56, 189, 248, 0.5),
+                0 0 20px rgba(236, 72, 153, 0.4);
+        }
+
+        .touch-btn:active::before {
+            opacity: 1;
+        }
+
+        .touch-btn .icon {
+            font-size: 1.3rem;
+            margin-bottom: 2px;
+        }
+
+        .touch-btn .label {
+            font-size: 0.55rem;
+            opacity: 0.9;
+        }
+
+        .touch-btn.thermal {
+            box-shadow: 
+                inset 0 2px 0 rgba(255, 255, 255, 0.3),
+                inset 0 -2px 5px rgba(0, 0, 0, 0.2),
+                0 4px 10px rgba(245, 158, 11, 0.4);
+        }
+
+        .touch-btn.thermal::before {
+            background: linear-gradient(
+                120deg,
+                rgba(245, 158, 11, 0.7) 0%,
+                rgba(239, 68, 68, 0.7) 50%,
+                rgba(245, 158, 11, 0.7) 100%
+            );
+            background-size: 200% 100%;
+            animation: gradientShift 3s linear infinite;
+        }
+
+        .touch-btn.lock {
+            box-shadow: 
+                inset 0 2px 0 rgba(255, 255, 255, 0.3),
+                inset 0 -2px 5px rgba(0, 0, 0, 0.2),
+                0 4px 10px rgba(34, 197, 94, 0.4);
+        }
+
+        .touch-btn.lock::before {
+            background: linear-gradient(
+                120deg,
+                rgba(34, 197, 94, 0.7) 0%,
+                rgba(56, 189, 248, 0.7) 50%,
+                rgba(34, 197, 94, 0.7) 100%
+            );
+            background-size: 200% 100%;
+            animation: gradientShift 3s linear infinite;
+        }
+
+        .touch-btn.transmit {
+            box-shadow: 
+                inset 0 2px 0 rgba(255, 255, 255, 0.3),
+                inset 0 -2px 5px rgba(0, 0, 0, 0.2),
+                0 4px 10px rgba(251, 191, 36, 0.4);
+        }
+
+        .touch-btn.transmit::before {
+            background: linear-gradient(
+                120deg,
+                rgba(251, 191, 36, 0.7) 0%,
+                rgba(236, 72, 153, 0.7) 50%,
+                rgba(251, 191, 36, 0.7) 100%
+            );
+            background-size: 200% 100%;
+            animation: gradientShift 3s linear infinite;
+        }
+
+        .touch-btn.detector {
+            box-shadow: 
+                inset 0 2px 0 rgba(255, 255, 255, 0.3),
+                inset 0 -2px 5px rgba(0, 0, 0, 0.2),
+                0 4px 10px rgba(129, 140, 248, 0.4);
+        }
+
+        .touch-btn.detector::before {
+            background: linear-gradient(
+                120deg,
+                rgba(129, 140, 248, 0.7) 0%,
+                rgba(236, 72, 153, 0.7) 50%,
+                rgba(129, 140, 248, 0.7) 100%
+            );
+            background-size: 200% 100%;
+            animation: gradientShift 3s linear infinite;
+        }
+
+        .touch-btn.active-state {
+            transform: scale(0.92);
+            box-shadow: 
+                inset 0 2px 0 rgba(255, 255, 255, 0.6),
+                inset 0 -2px 5px rgba(0, 0, 0, 0.3),
+                0 0 25px currentColor;
+        }
+
+        .height-buttons {
+            position: fixed;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 60;
+        }
+
+        .height-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            color: white;
+            cursor: pointer;
+            overflow: hidden;
+            isolation: isolate;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 
+                inset 0 2px 0 rgba(255, 255, 255, 0.3),
+                inset 0 -2px 5px rgba(0, 0, 0, 0.2),
+                0 4px 10px rgba(56, 189, 248, 0.3);
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .height-btn::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(
+                120deg,
+                rgba(56, 189, 248, 0.6) 0%,
+                rgba(129, 140, 248, 0.6) 50%,
+                rgba(56, 189, 248, 0.6) 100%
+            );
+            background-size: 200% 100%;
+            opacity: 0.7;
+            z-index: -1;
+            animation: gradientShift 4s linear infinite;
+            border-radius: 50%;
+        }
+
+        .height-btn:active {
+            transform: scale(0.92);
+        }
+
+        @media (max-width: 900px), (hover: none) and (pointer: coarse) {
+            .left-panel { display: none; }
+            .minimap { 
+                bottom: 200px;
+                right: 10px; 
+                width: 100px;
+                height: 100px;
+            }
+            .hud-tr { top: 52px; right: 10px; width: 130px; }
+            .hud-tl { top: 52px; left: 10px; width: 130px; }
+            .hud-bl { bottom: 200px; left: 10px; }
+            .signal-bar-container { 
+                min-width: 200px; 
+                font-size: 0.65rem;
+                bottom: 140px;
+            }
+            .drone-status { font-size: 0.75rem; top: 95px; }
+            .top-bar { height: 40px; padding: 4px 8px; }
+            .badge { font-size: 0.5rem; padding: 2px 6px; }
+            .title { font-size: 0.6rem; }
+            .compass { top: 46px; font-size: 0.65rem; }
+            .hud-corner { padding: 4px 8px; font-size: 0.65rem; min-width: 110px; }
+            .hud-label { font-size: 0.6rem; }
+            .hud-value { font-size: 0.65rem; }
+            .crosshair { width: 60px; height: 60px; }
+            .crosshair-circle { width: 30px; height: 30px; }
+            .lock-ring { width: 80px; height: 80px; }
+            .touch-controls.active { display: flex; }
+            .height-buttons { display: flex; }
+            .start-screen h1 { font-size: 1.4rem; }
+            .start-screen .subtitle { font-size: 0.8rem; }
+            .mission-brief { padding: 12px 15px; }
+            .mission-brief p { font-size: 0.75rem; }
+            .support-text { font-size: 0.6rem; }
+            .coord-notification { font-size: 0.85rem; padding: 10px 20px; }
+            .coat-of-arms { width: 120px; height: 120px; }
+            .governor-support-text { font-size: 1rem; padding: 10px 20px; }
+            .wind-indicator { 
+                top: 110px; 
+                right: 10px; 
+                min-width: 110px;
+                font-size: 0.65rem;
+                padding: 6px 10px;
+            }
+            .sound-toggle { top: 46px; width: 36px; height: 36px; font-size: 1rem; }
+            #musicToggle { left: calc(50% - 45px); }
+            #soundToggle { left: calc(50% + 9px); }
+        }
+
+        @media (max-width: 500px) {
+            .minimap { display: none; }
+            .hud-bl { display: none; }
+            .joystick-container { width: 100px; height: 100px; }
+            .joystick-stick { width: 42px; height: 42px; }
+            .touch-btn { width: 52px; height: 52px; }
+            .touch-btn .icon { font-size: 1.1rem; }
+            .touch-btn .label { font-size: 0.5rem; }
+            .height-btn { width: 42px; height: 42px; font-size: 1.2rem; }
+            .title { font-size: 0.55rem; }
+            .badge { font-size: 0.45rem; }
+            .coat-of-arms { width: 100px; height: 100px; }
+            .governor-support-text { font-size: 0.9rem; }
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<div class="ui-layer top-bar">
+    <span class="badge lesson-badge">УРОК 1 • ПРОФ.</span>
+    <div class="title">🎯 ОБНАРУЖЕНИЕ ВРАЖЕСКОГО БПЛА</div>
+    <span class="badge support-badge">🏛️ ГУБЕРНАТОР ВОРОНЕЖСКОЙ ОБЛ.</span>
+</div>
+
+<div class="sound-toggle" id="musicToggle" title="Фоновая музыка (N)">🎵</div>
+<div class="sound-toggle" id="soundToggle" title="Эффекты вкл/выкл (M)">🔊</div>
+
+<audio id="bgMusic" loop preload="auto">
+    <source src="uav-mission.mp3" type="audio/mpeg">
+</audio>
+
+<div class="ui-layer hud-corner hud-tl">
+    <div class="hud-row"><span class="hud-label">⏱️ Время:</span><span class="hud-value" id="timer">05:00</span></div>
+    <div class="hud-row"><span class="hud-label">🎯 Очки:</span><span class="hud-value gold" id="score">0</span></div>
+    <div class="hud-row"><span class="hud-label">📏 Высота:</span><span class="hud-value" id="altitude">300 м</span></div>
+    <div class="hud-row"><span class="hud-label">🧭 Курс:</span><span class="hud-value" id="heading">000°</span></div>
+</div>
+
+<div class="ui-layer hud-corner hud-tr">
+    <div class="hud-row"><span class="hud-label">🔋 Тепловизор:</span><span class="hud-value orange" id="thermal">100%</span></div>
+    <div class="hud-row"><span class="hud-label">📡 Детектор:</span><span class="hud-value green" id="detector">ГОТОВ</span></div>
+    <div class="hud-row"><span class="hud-label">🔭 Оптика:</span><span class="hud-value" id="zoom">1.0x</span></div>
+    <div class="hud-row"><span class="hud-label">🎯 Захват:</span><span class="hud-value red" id="lockStatus">—</span></div>
+</div>
+
+<div class="ui-layer hud-corner hud-bl">
+    <div class="hud-row"><span class="hud-label">📍 Координаты:</span></div>
+    <div class="hud-row"><span class="hud-label">X:</span><span class="hud-value" id="coordX">0</span></div>
+    <div class="hud-row"><span class="hud-label">Z:</span><span class="hud-value" id="coordZ">0</span></div>
+    <div class="hud-row"><span class="hud-label">🌅 Время суток:</span><span class="hud-value orange">Закат</span></div>
+</div>
+
+<div class="ui-layer compass" id="compass">N 000°</div>
+
+<div class="ui-layer wind-indicator" id="windIndicator">
+    <div style="font-size: 0.7rem; color: var(--text-secondary);">💨 ВЕТЕР</div>
+    <div class="wind-direction">
+        <span class="wind-arrow" id="windArrow">➤</span>
+        <span class="wind-strength" id="windStrength">0 м/с</span>
+    </div>
+</div>
+
+<div class="ui-layer signal-bar-container">
+    <div style="font-size: 0.8rem;">📡 СИГНАЛ: <strong id="signalText">НЕ ОБНАРУЖЕН</strong></div>
+    <div class="signal-bar"><div class="signal-fill" id="signalFill"></div></div>
+</div>
+
+<div class="ui-layer left-panel">
+    <div class="panel-section">
+        <div class="panel-title">🎮 Управление</div>
+        <div class="control-row"><span>Осмотр</span><span><span class="key">ЛКМ</span></span></div>
+        <div class="control-row"><span>Зум</span><span><span class="key">Колёсико</span></span></div>
+        <div class="control-row"><span>Движение</span><span><span class="key">WASD</span></span></div>
+        <div class="control-row"><span>Вверх/Вниз</span><span><span class="key">Shift/Ctrl</span></span></div>
+        <div class="control-row"><span>Тепловизор</span><span><span class="key">Пробел</span></span></div>
+        <div class="control-row"><span>Детектор</span><span><span class="key">E</span></span></div>
+        <div class="control-row"><span>Захват цели</span><span><span class="key">F / ПКМ</span></span></div>
+        <div class="control-row"><span>Передать коорд.</span><span><span class="key">T</span></span></div>
+        <div class="control-row"><span>Звук эффектов</span><span><span class="key">M</span></span></div>
+        <div class="control-row"><span>Музыка вкл/выкл</span><span><span class="key">N</span></span></div>
+    </div>
+    <div class="panel-section">
+        <div class="panel-title">📋 Задание</div>
+        <p style="font-size: 0.55rem; color: var(--text-secondary); line-height: 1.3; margin: 0;">
+            БПЛА появляется на 15 сек, затем исчезает на 15 сек.<br>
+            Захватите цель (F) и передайте координаты (T)!<br>
+            Время: 5 минут.<br>
+            <span style="color: var(--accent-orange);">⚠️ Учитывайте порывы ветра!</span>
+        </p>
+    </div>
+</div>
+
+<div class="ui-layer minimap">
+    <div class="minimap-title">🗺️ КАРТА</div>
+    <canvas id="minimapCanvas" width="150" height="150"></canvas>
+</div>
+
+<div class="ui-layer crosshair">
+    <div class="crosshair-circle"></div>
+    <div class="crosshair-dot"></div>
+</div>
+
+<div class="ui-layer lock-ring" id="lockRing">
+    <svg viewBox="0 0 100 100">
+        <circle class="bg" cx="50" cy="50" r="45"></circle>
+        <circle class="fg" id="lockCircle" cx="50" cy="50" r="45"></circle>
+    </svg>
+</div>
+
+<div class="ui-layer thermal-overlay" id="thermalOverlay"></div>
+
+<div class="ui-layer warning" id="warning">⚠️ ОБНАРУЖЕНА АКТИВНОСТЬ!</div>
+
+<div class="coord-notification" id="coordNotification">
+    📡 КООРДИНАТЫ ПЕРЕДАНЫ НА КОМАНДНЫЙ ПУНКТ!
+</div>
+
+<div class="enemy-indicator" id="enemyIndicator"></div>
+
+<div class="drone-status" id="droneStatus">
+    <div>🛸 ВРАЖЕСКИЙ БПЛА</div>
+    <div class="countdown" id="droneCountdown">15</div>
+    <div style="font-size: 0.65rem; opacity: 0.7;" id="droneState">АКТИВЕН</div>
+</div>
+
+<div class="control-hint" id="controlHint">
+    🖱️ WASD — движение | F — захват цели | T — передать координаты
+</div>
+
+<div class="touch-controls" id="touchControls">
+    <div class="joystick-container" id="joystickContainer">
+        <div class="joystick-base"></div>
+        <div class="joystick-stick" id="joystickStick"></div>
+    </div>
+    <div class="action-buttons">
+        <div class="touch-btn thermal" id="btnThermal">
+            <span class="icon">🔥</span>
+            <span class="label">ТЕПЛ.</span>
+        </div>
+        <div class="touch-btn lock" id="btnLock">
+            <span class="icon">🎯</span>
+            <span class="label">ЗАХВАТ</span>
+        </div>
+        <div class="touch-btn detector" id="btnDetector">
+            <span class="icon">📡</span>
+            <span class="label">ДЕТЕКТ.</span>
+        </div>
+        <div class="touch-btn transmit" id="btnTransmit">
+            <span class="icon">📤</span>
+            <span class="label">ПЕРЕД.</span>
+        </div>
+    </div>
+</div>
+
+<div class="height-buttons" id="heightButtons">
+    <div class="height-btn" id="btnUp">▲</div>
+    <div class="height-btn" id="btnDown">▼</div>
+</div>
+
+<div class="start-screen" id="startScreen">
+    <div class="coat-of-arms-container">
+        <div class="coat-of-arms">
+            <img src="The State Coat of Arms of the Voronezh Region.jpeg" alt="Герб Воронежской области">
+        </div>
+    </div>
+    
+    <div class="governor-support-text">
+        ПРОЕКТ СОЗДАН ПРИ ПОДДЕРЖКЕ<br>ГУБЕРНАТОРА ВОРОНЕЖСКОЙ ОБЛАСТИ
+    </div>
+    
+    <h1>МИССИЯ: ОБНАРУЖЕНИЕ ВРАЖЕСКОГО БПЛА</h1>
+    <p class="subtitle">Профессиональный симулятор оператора БПЛА-разведчика</p>
+    
+    <div class="mission-brief">
+        <h3>📋 БРИФИНГ</h3>
+        <p><strong>Задача:</strong> обнаружить замаскированный вражеский БПЛА.</p>
+        <p><strong>Важно!</strong> БПЛА появляется на <strong>15 секунд</strong>, затем исчезает на <strong>15 секунд</strong>.</p>
+        <p>Успейте захватить цель <strong>(F или кнопка 🎯)</strong> и передать координаты <strong>(T или кнопка 📤)</strong>.</p>
+        <p><strong>Время на выполнение:</strong> 5 минут.</p>
+        <p><strong>📌 Подсказка:</strong> Используйте тепловизор для поиска цели.</p>
+        <p><strong>💨 ВЕТЕР:</strong> Учитывайте порывы ветра — они влияют на управление!</p>
+        <p><strong>🎵 МУЗЫКА:</strong> Фоновая музыка из файла <strong>uav-mission.mp3</strong>. Клавиша <strong>N</strong> — вкл/выкл.</p>
+        <p><strong>🔊 ЗВУКИ:</strong> Эффекты (захват, ветер, победа). Клавиша <strong>M</strong> — вкл/выкл.</p>
+        <p><strong>📱 Мобильные:</strong> Виртуальный джойстик слева, кнопки действий справа.</p>
+    </div>
+
+    <button class="btn-glass btn-start" id="startBtn">▶ НАЧАТЬ МИССИЮ</button>
+</div>
+
+<div class="modal" id="winModal">
+    <div class="modal-content">
+        <h2>🏆 МИССИЯ ВЫПОЛНЕНА!</h2>
+        <p>Вражеский БПЛА обнаружен и его координаты переданы на командный пункт!</p>
+        <div class="stats">
+            <div class="stat-item"><div class="stat-label">Время</div><div class="stat-value" id="finalTime">00:00</div></div>
+            <div class="stat-item"><div class="stat-label">Очки</div><div class="stat-value" id="finalScore">0</div></div>
+            <div class="stat-item"><div class="stat-label">Точность</div><div class="stat-value" id="finalAccuracy">100%</div></div>
+            <div class="stat-item"><div class="stat-label">Ранг</div><div class="stat-value" id="finalRank">СЕРЖАНТ</div></div>
+        </div>
+        <button class="btn-glass btn-start" id="restartBtn1">🔄 НОВАЯ МИССИЯ</button>
+    </div>
+</div>
+
+<div class="modal" id="loseModal">
+    <div class="modal-content">
+        <h2 style="background: linear-gradient(90deg, var(--accent-red), var(--accent-orange)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">⚠️ МИССИЯ ПРОВАЛЕНА</h2>
+        <p>Вражеский БПЛА не был обнаружен вовремя. Противник выполнил свою задачу.</p>
+        <p style="color: var(--accent-cyan); font-weight: bold;">В следующий раз повезёт!</p>
+        <button class="btn-glass btn-danger" id="restartBtn2">🔄 ПОВТОРИТЬ</button>
+    </div>
+</div>
+
+<footer class="ui-layer">
+    <div class="support-text">🏛️ ПРОЕКТ СОЗДАН ПРИ ПОДДЕРЖКЕ ГУБЕРНАТОРА ВОРОНЕЖСКОЙ ОБЛАСТИ</div>
+</footer>
+
+<script>
+// ============================================
+// 🎵 СИСТЕМА ОЗВУЧКИ (Web Audio API) - ОПТИМИЗИРОВАННАЯ
+// ============================================
+const SoundSystem = {
+    audioContext: null,
+    masterGain: null,
+    windNode: null,
+    windGain: null,
+    windFilter: null,
+    isMuted: false,
+    isInitialized: false,
+    buffers: { wind: null, windGust: null },
+    
+    init() {
+        if (this.isInitialized) return;
+        try {
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            this.masterGain = this.audioContext.createGain();
+            this.masterGain.gain.value = this.isMuted ? 0 : 0.5;
+            this.masterGain.connect(this.audioContext.destination);
+            this._createWindBuffers();
+            this.isInitialized = true;
+            console.log('🔊 Аудио-система инициализирована');
+            if (this.audioContext.state === 'suspended') this._resumeContext();
+        } catch (e) {
+            console.warn('⚠️ Web Audio API не поддерживается:', e);
+        }
+    },
+    
+    _createWindBuffers() {
+        if (!this.audioContext) return;
+        try {
+            const windSize = Math.floor(this.audioContext.sampleRate * 2);
+            const windBuffer = this.audioContext.createBuffer(1, windSize, this.audioContext.sampleRate);
+            const windData = windBuffer.getChannelData(0);
+            for (let i = 0; i < windSize; i++) windData[i] = Math.random() * 2 - 1;
+            this.buffers.wind = windBuffer;
+            
+            const gustSize = Math.floor(this.audioContext.sampleRate * 0.5);
+            const gustBuffer = this.audioContext.createBuffer(1, gustSize, this.audioContext.sampleRate);
+            const gustData = gustBuffer.getChannelData(0);
+            for (let i = 0; i < gustSize; i++) {
+                gustData[i] = (Math.random() * 2 - 1) * (1 - i / gustSize);
+            }
+            this.buffers.windGust = gustBuffer;
+        } catch (e) {
+            console.warn('Не удалось создать буферы:', e);
+        }
+    },
+    
+    _resumeContext() {
+        if (!this.audioContext || this.audioContext.state !== 'suspended') return;
+        this.audioContext.resume().catch(() => {});
+    },
+    
+    isReady() {
+        if (!this.isInitialized || !this.audioContext) return false;
+        if (this.audioContext.state === 'suspended') {
+            this._resumeContext();
+            return false;
+        }
+        return this.audioContext.state === 'running';
+    },
+    
+    toggleMute() {
+        this.isMuted = !this.isMuted;
+        if (this.masterGain && this.audioContext) {
+            const now = this.audioContext.currentTime;
+            this.masterGain.gain.cancelScheduledValues(now);
+            this.masterGain.gain.setValueAtTime(this.masterGain.gain.value, now);
+            this.masterGain.gain.linearRampToValueAtTime(this.isMuted ? 0 : 0.5, now + 0.1);
+        }
+        const toggle = document.getElementById('soundToggle');
+        if (toggle) {
+            toggle.textContent = this.isMuted ? '🔇' : '🔊';
+            toggle.classList.toggle('muted', this.isMuted);
+        }
+        if (!this.isMuted) this._resumeContext();
+        if (this.windGain) this.updateWindVolume(this.windGain._currentStrength || 0);
+    },
+    
+    playTone(frequency, duration, type = 'sine', volume = 0.3) {
+        if (!this.isReady()) return;
+        try {
+            const now = this.audioContext.currentTime;
+            const osc = this.audioContext.createOscillator();
+            const gain = this.audioContext.createGain();
+            osc.type = type;
+            osc.frequency.value = frequency;
+            gain.gain.setValueAtTime(0, now);
+            gain.gain.linearRampToValueAtTime(volume, now + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+            osc.start(now);
+            osc.stop(now + duration + 0.05);
+            osc.onended = () => { osc.disconnect(); gain.disconnect(); };
+        } catch (e) {}
+    },
+    
+    playClick() { this.playTone(800, 0.05, 'square', 0.1); },
+    
+    playLockStart() {
+        if (!this.isReady()) return;
+        try {
+            const now = this.audioContext.currentTime;
+            const osc = this.audioContext.createOscillator();
+            const gain = this.audioContext.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(400, now);
+            osc.frequency.linearRampToValueAtTime(800, now + 0.3);
+            gain.gain.setValueAtTime(0, now);
+            gain.gain.linearRampToValueAtTime(0.2, now + 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+            osc.start(now);
+            osc.stop(now + 0.4);
+            osc.onended = () => { osc.disconnect(); gain.disconnect(); };
+        } catch (e) {}
+    },
+    
+    playLockComplete() {
+        if (!this.isReady() || this.isMuted) return;
+        this.playTone(523, 0.15, 'sine', 0.3);
+        setTimeout(() => { if (!this.isMuted) this.playTone(659, 0.15, 'sine', 0.3); }, 100);
+        setTimeout(() => { if (!this.isMuted) this.playTone(784, 0.3, 'sine', 0.3); }, 200);
+    },
+    
+    playTransmit() {
+        if (!this.isReady()) return;
+        try {
+            const now = this.audioContext.currentTime;
+            const osc = this.audioContext.createOscillator();
+            const gain = this.audioContext.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(1000, now);
+            osc.frequency.linearRampToValueAtTime(2000, now + 0.2);
+            osc.frequency.linearRampToValueAtTime(1500, now + 0.4);
+            gain.gain.setValueAtTime(0, now);
+            gain.gain.linearRampToValueAtTime(0.25, now + 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+            osc.start(now);
+            osc.stop(now + 0.6);
+            osc.onended = () => { osc.disconnect(); gain.disconnect(); };
+            setTimeout(() => { if (!this.isMuted) this.playTone(1800, 0.2, 'sine', 0.2); }, 300);
+        } catch (e) {}
+    },
+    
+    playDetector() {
+        if (!this.isReady()) return;
+        try {
+            const now = this.audioContext.currentTime;
+            const osc = this.audioContext.createOscillator();
+            const gain = this.audioContext.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(600, now);
+            osc.frequency.linearRampToValueAtTime(300, now + 0.3);
+            gain.gain.setValueAtTime(0, now);
+            gain.gain.linearRampToValueAtTime(0.2, now + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+            osc.start(now);
+            osc.stop(now + 0.5);
+            osc.onended = () => { osc.disconnect(); gain.disconnect(); };
+        } catch (e) {}
+    },
+    
+    playThermal(state) {
+        if (!this.isReady()) return;
+        this.playTone(state ? 200 : 100, state ? 0.2 : 0.15, 'sawtooth', state ? 0.15 : 0.1);
+    },
+    
+    playWarning() {
+        if (!this.isReady() || this.isMuted) return;
+        for (let i = 0; i < 3; i++) {
+            setTimeout(() => { if (!this.isMuted) this.playTone(880, 0.1, 'square', 0.2); }, i * 150);
+        }
+    },
+    
+    playDroneAppear() {
+        if (!this.isReady()) return;
+        try {
+            const now = this.audioContext.currentTime;
+            const osc = this.audioContext.createOscillator();
+            const gain = this.audioContext.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(300, now);
+            osc.frequency.linearRampToValueAtTime(600, now + 0.2);
+            gain.gain.setValueAtTime(0, now);
+            gain.gain.linearRampToValueAtTime(0.2, now + 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+            osc.start(now);
+            osc.stop(now + 0.4);
+            osc.onended = () => { osc.disconnect(); gain.disconnect(); };
+        } catch (e) {}
+    },
+    
+    playVictory() {
+        if (!this.isReady() || this.isMuted) return;
+        const notes = [523, 659, 784, 1047];
+        notes.forEach((freq, i) => {
+            setTimeout(() => { if (!this.isMuted) this.playTone(freq, 0.3, 'sine', 0.3); }, i * 150);
+        });
+        setTimeout(() => {
+            if (!this.isMuted) {
+                this.playTone(1047, 0.6, 'sine', 0.3);
+                this.playTone(784, 0.6, 'sine', 0.2);
+                this.playTone(523, 0.6, 'sine', 0.2);
+            }
+        }, 600);
+    },
+    
+    playDefeat() {
+        if (!this.isReady()) return;
+        try {
+            const now = this.audioContext.currentTime;
+            const osc = this.audioContext.createOscillator();
+            const gain = this.audioContext.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(400, now);
+            osc.frequency.exponentialRampToValueAtTime(100, now + 1);
+            gain.gain.setValueAtTime(0, now);
+            gain.gain.linearRampToValueAtTime(0.25, now + 0.1);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 1);
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+            osc.start(now);
+            osc.stop(now + 1.1);
+            osc.onended = () => { osc.disconnect(); gain.disconnect(); };
+        } catch (e) {}
+    },
+    
+    playWindGust(strength) {
+        if (!this.isReady() || !this.buffers.windGust) return;
+        try {
+            const source = this.audioContext.createBufferSource();
+            source.buffer = this.buffers.windGust;
+            const filter = this.audioContext.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.value = 400 + strength * 800;
+            const gain = this.audioContext.createGain();
+            gain.gain.value = 0.1 * strength;
+            source.connect(filter);
+            filter.connect(gain);
+            gain.connect(this.masterGain);
+            source.start();
+            source.onended = () => { source.disconnect(); filter.disconnect(); gain.disconnect(); };
+        } catch (e) {}
+    },
+    
+    startWindLoop() {
+        if (!this.isReady() || this.windNode || !this.buffers.wind) return;
+        try {
+            this.windNode = this.audioContext.createBufferSource();
+            this.windNode.buffer = this.buffers.wind;
+            this.windNode.loop = true;
+            this.windFilter = this.audioContext.createBiquadFilter();
+            this.windFilter.type = 'lowpass';
+            this.windFilter.frequency.value = 300;
+            this.windGain = this.audioContext.createGain();
+            this.windGain.gain.value = 0;
+            this.windGain._currentStrength = 0;
+            this.windNode.connect(this.windFilter);
+            this.windFilter.connect(this.windGain);
+            this.windGain.connect(this.masterGain);
+            this.windNode.start();
+        } catch (e) {}
+    },
+    
+    updateWindVolume(strength) {
+        if (!this.windGain || !this.isReady()) return;
+        try {
+            const targetVolume = this.isMuted ? 0 : strength * 0.15;
+            const now = this.audioContext.currentTime;
+            this.windGain.gain.cancelScheduledValues(now);
+            this.windGain.gain.setValueAtTime(this.windGain.gain.value, now);
+            this.windGain.gain.linearRampToValueAtTime(targetVolume, now + 0.1);
+            this.windGain._currentStrength = strength;
+        } catch (e) {}
+    },
+    
+    stopWindLoop() {
+        try {
+            if (this.windNode) { this.windNode.stop(); this.windNode.disconnect(); this.windNode = null; }
+            if (this.windFilter) { this.windFilter.disconnect(); this.windFilter = null; }
+            if (this.windGain) { this.windGain.disconnect(); this.windGain = null; }
+        } catch (e) {}
+    },
+    
+    destroy() {
+        this.stopWindLoop();
+        if (this.audioContext) {
+            try { this.audioContext.close(); } catch(e) {}
+        }
+        this.audioContext = null;
+        this.masterGain = null;
+        this.isInitialized = false;
+    }
+};
+
+// ============================================
+// 🎵 ФОНОВАЯ МУЗЫКА
+// ============================================
+const bgMusic = document.getElementById('bgMusic');
+bgMusic.volume = 0.3;
+let musicPlaying = false;
+
+document.getElementById('musicToggle').addEventListener('click', () => {
+    const toggle = document.getElementById('musicToggle');
+    if (musicPlaying) {
+        bgMusic.pause();
+        toggle.textContent = '🎵';
+        toggle.classList.remove('playing');
+        toggle.classList.add('muted');
+        musicPlaying = false;
+    } else {
+        bgMusic.play().then(() => {
+            toggle.textContent = '🎶';
+            toggle.classList.add('playing');
+            toggle.classList.remove('muted');
+            musicPlaying = true;
+        }).catch(err => console.warn('⚠️ Не удалось воспроизвести музыку:', err));
+    }
+});
+
+document.getElementById('soundToggle').addEventListener('click', () => {
+    SoundSystem.init();
+    SoundSystem.toggleMute();
+    SoundSystem.playClick();
+});
+
+// Быстрая инициализация звука при первом взаимодействии
+let audioInitialized = false;
+function initAudioFast() {
+    if (audioInitialized) return;
+    SoundSystem.init();
+    audioInitialized = true;
+    document.removeEventListener('click', initAudioFast, true);
+    document.removeEventListener('touchstart', initAudioFast, true);
+    document.removeEventListener('keydown', initAudioFast);
+}
+document.addEventListener('click', initAudioFast, { capture: true });
+document.addEventListener('touchstart', initAudioFast, { passive: true, capture: true });
+document.addEventListener('keydown', initAudioFast);
+
+// ============================================
+// ОПРЕДЕЛЕНИЕ МОБИЛЬНОГО УСТРОЙСТВА
+// ============================================
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+                 || ('ontouchstart' in window) 
+                 || (navigator.maxTouchPoints > 0);
+
+// КЭШИРОВАНИЕ DOM-ЭЛЕМЕНТОВ (оптимизация)
+const DOM = {
+    timer: document.getElementById('timer'),
+    score: document.getElementById('score'),
+    altitude: document.getElementById('altitude'),
+    heading: document.getElementById('heading'),
+    thermal: document.getElementById('thermal'),
+    detector: document.getElementById('detector'),
+    zoom: document.getElementById('zoom'),
+    lockStatus: document.getElementById('lockStatus'),
+    coordX: document.getElementById('coordX'),
+    coordZ: document.getElementById('coordZ'),
+    compass: document.getElementById('compass'),
+    windArrow: document.getElementById('windArrow'),
+    windStrength: document.getElementById('windStrength'),
+    signalFill: document.getElementById('signalFill'),
+    signalText: document.getElementById('signalText'),
+    lockRing: document.getElementById('lockRing'),
+    lockCircle: document.getElementById('lockCircle'),
+    thermalOverlay: document.getElementById('thermalOverlay'),
+    warning: document.getElementById('warning'),
+    coordNotification: document.getElementById('coordNotification'),
+    enemyIndicator: document.getElementById('enemyIndicator'),
+    droneStatus: document.getElementById('droneStatus'),
+    droneCountdown: document.getElementById('droneCountdown'),
+    droneState: document.getElementById('droneState'),
+    controlHint: document.getElementById('controlHint'),
+    startScreen: document.getElementById('startScreen'),
+    winModal: document.getElementById('winModal'),
+    loseModal: document.getElementById('loseModal'),
+    finalTime: document.getElementById('finalTime'),
+    finalScore: document.getElementById('finalScore'),
+    finalAccuracy: document.getElementById('finalAccuracy'),
+    finalRank: document.getElementById('finalRank')
+};
+
+const game = {
+    running: false,
+    paused: false,
+    time: 300,
+    score: 0,
+    thermalCharge: 100,
+    thermalActive: false,
+    detectorReady: true,
+    detectorCooldown: 0,
+    lockProgress: 0,
+    isLocking: false,
+    zoom: 1.0,
+    lastFrame: performance.now(),
+    targetCaptured: false,
+    coordsTransmitted: false,
+    enemyFound: false,
+    droneCycle: 0,
+    droneTimer: 15,
+    droneVisible: true,
+    droneStartPos: null,
+    droneBaseY: 0,
+    joystickX: 0,
+    joystickY: 0,
+    isJoystickActive: false,
+    isLockButtonPressed: false,
+    isThermalButtonPressed: false,
+    isUpButtonPressed: false,
+    isDownButtonPressed: false,
+    wind: {
+        x: 0, z: 0, strength: 0, direction: 0,
+        gustTimer: 0, nextGust: 3000, maxStrength: 0.8
+    }
+};
+
+const canvas = document.getElementById('gameCanvas');
+let scene, camera, renderer;
+
+try {
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 5000);
+    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.setClearColor(0xe6c7a1);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+} catch (e) {
+    console.error('❌ WebGL не поддерживается:', e);
+    alert('Ваш браузер не поддерживает WebGL. Пожалуйста, используйте современный браузер.');
+}
+
+scene.fog = new THREE.FogExp2(0xe6c7a1, 0.0002);
+
+if (isMobile) {
+    document.getElementById('touchControls').classList.add('active');
+}
+
+// ============================================
+// СОЗДАНИЕ ЛАНДШАФТА
+// ============================================
+function createPhotoTexture() {
+    const texCanvas = document.createElement('canvas');
+    texCanvas.width = 4096;
+    texCanvas.height = 4096;
+    const ctx = texCanvas.getContext('2d');
+
+    ctx.fillStyle = '#4c8033';
+    ctx.fillRect(0, 0, texCanvas.width, texCanvas.height);
+
+    ctx.fillStyle = '#b58552';
+    ctx.beginPath();
+    ctx.moveTo(600, 2400);
+    ctx.lineTo(2600, 2000);
+    ctx.lineTo(2800, 3000);
+    ctx.lineTo(1000, 3600);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#fabd16';
+    ctx.beginPath();
+    ctx.moveTo(200, 800);
+    ctx.lineTo(1600, 900);
+    ctx.lineTo(1400, 1800);
+    ctx.lineTo(400, 1900);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#e8a361';
+    ctx.fillRect(2200, 600, 1400, 800);
+
+    ctx.fillStyle = '#2d5a1e';
+    ctx.beginPath();
+    ctx.moveTo(100, 3200);
+    ctx.lineTo(800, 2800);
+    ctx.lineTo(1000, 4000);
+    ctx.lineTo(200, 4096);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+    ctx.lineWidth = 3;
+    for (let i = 400; i < 3200; i += 18) {
+        ctx.beginPath();
+        ctx.moveTo(i, 1600);
+        ctx.lineTo(i + 200, 3800);
+        ctx.stroke();
+    }
+
+    ctx.strokeStyle = '#e0cfb3';
+    ctx.lineWidth = 40;
+    ctx.beginPath();
+    ctx.moveTo(1800, 0);
+    ctx.quadraticCurveTo(2200, 1600, 4096, 3800);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#c4b39a';
+    ctx.lineWidth = 20;
+    ctx.beginPath();
+    ctx.moveTo(600, 4096);
+    ctx.lineTo(900, 2800);
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(20, 40, 10, 0.15)';
+    ctx.lineWidth = 60;
+    for (let i = 0; i < 12; i++) {
+        const x = 400 + i * 300 + Math.random() * 100;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x + 100, texCanvas.height);
+        ctx.stroke();
+    }
+
+    const texture = new THREE.CanvasTexture(texCanvas);
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.anisotropy = 4;
+    return texture;
+}
+
+const size = 5000;
+const geometry = new THREE.PlaneGeometry(size, size, 50, 50);
+geometry.rotateX(-Math.PI / 2);
+
+const pos = geometry.attributes.position;
+for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const z = pos.getZ(i);
+    let y = Math.sin(x * 0.002 + 0.5) * Math.cos(z * 0.002 + 1.2) * 25;
+    y += Math.sin(x * 0.005 + 0.3) * Math.cos(z * 0.004 + 0.8) * 15;
+    y += Math.sin(x * 0.01) * Math.cos(z * 0.01) * 8;
+    pos.setY(i, y);
+}
+geometry.computeVertexNormals();
+
+const material = new THREE.MeshStandardMaterial({
+    map: createPhotoTexture(),
+    roughness: 0.9,
+    metalness: 0.0,
+});
+
+const terrain = new THREE.Mesh(geometry, material);
+terrain.receiveShadow = true;
+terrain.position.set(0, -10, 0);
+scene.add(terrain);
+
+const ambient = new THREE.AmbientLight(0xfff0e0, 0.5);
+scene.add(ambient);
+
+const hemisphereLight = new THREE.HemisphereLight(0xffcc88, 0x442211, 0.3);
+scene.add(hemisphereLight);
+
+const sunLight = new THREE.DirectionalLight(0xffdd99, 1.2);
+sunLight.position.set(1500, 500, 1000);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.width = 4096;
+sunLight.shadow.mapSize.height = 4096;
+sunLight.shadow.camera.near = 10;
+sunLight.shadow.camera.far = 5000;
+const d = 3000;
+sunLight.shadow.camera.left = -d;
+sunLight.shadow.camera.right = d;
+sunLight.shadow.camera.top = d;
+sunLight.shadow.camera.bottom = -d;
+sunLight.shadow.bias = -0.001;
+scene.add(sunLight);
+
+const fillLight = new THREE.DirectionalLight(0x88aaff, 0.15);
+fillLight.position.set(-1000, 400, -600);
+scene.add(fillLight);
+
+const leafMat = new THREE.MeshStandardMaterial({ color: 0x2d4f1e, roughness: 0.8 });
+const leafMat2 = new THREE.MeshStandardMaterial({ color: 0x3a5a2a, roughness: 0.8 });
+const leafMat3 = new THREE.MeshStandardMaterial({ color: 0x224015, roughness: 0.8 });
+
+function getTerrainHeight(x, z) {
+    let y = Math.sin(x * 0.002 + 0.5) * Math.cos(z * 0.002 + 1.2) * 25;
+    y += Math.sin(x * 0.005 + 0.3) * Math.cos(z * 0.004 + 0.8) * 15;
+    y += Math.sin(x * 0.01) * Math.cos(z * 0.01) * 8;
+    return y;
+}
+
+function createTree(x, z, scale = 1) {
+    const group = new THREE.Group();
+    const y = getTerrainHeight(x, z);
+
+    const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.5 * scale, 2.5 * scale, 8 * scale, 6),
+        new THREE.MeshStandardMaterial({ color: 0x4a3319, roughness: 1 })
+    );
+    trunk.position.y = 4 * scale;
+    trunk.castShadow = true;
+    group.add(trunk);
+
+    const crownSize = 12 * scale;
+    const crown = new THREE.Mesh(
+        new THREE.SphereGeometry(crownSize, 7, 7),
+        [leafMat, leafMat2, leafMat3][Math.floor(Math.random() * 3)]
+    );
+    crown.position.set(0, 12 * scale + Math.random() * 4 * scale, 0);
+    crown.castShadow = true;
+    group.add(crown);
+
+    const crown2 = new THREE.Mesh(
+        new THREE.SphereGeometry(crownSize * 0.7, 7, 7),
+        [leafMat, leafMat2, leafMat3][Math.floor(Math.random() * 3)]
+    );
+    crown2.position.set((Math.random() - 0.5) * 8 * scale, 10 * scale, (Math.random() - 0.5) * 8 * scale);
+    crown2.castShadow = true;
+    group.add(crown2);
+
+    group.position.set(x, y - 10, z);
+    return group;
+}
+
+function createTreeLine(startX, startZ, endX, endZ, count) {
+    for (let i = 0; i <= count; i++) {
+        const t = i / count;
+        const x = startX + (endX - startX) * t + (Math.random() - 0.5) * 15;
+        const z = startZ + (endZ - startZ) * t + (Math.random() - 0.5) * 15;
+        const scale = 0.6 + Math.random() * 0.6;
+        scene.add(createTree(x, z, scale));
+    }
+}
+
+createTreeLine(-400, -1600, 600, 800, 100);
+createTreeLine(-600, -800, 400, 200, 60);
+createTreeLine(1000, 400, 2000, 1200, 80);
+createTreeLine(-800, 400, -200, 1000, 50);
+createTreeLine(1400, -1200, 2200, -400, 70);
+createTreeLine(-1800, 200, -1200, 1600, 80);
+
+for (let i = 0; i < 60; i++) {
+    const x = -1600 + Math.random() * 1200;
+    const z = -1600 + Math.random() * 800;
+    scene.add(createTree(x, z, 0.5 + Math.random() * 0.6));
+}
+
+function createHouse(x, z, rot = 0) {
+    const group = new THREE.Group();
+    const y = getTerrainHeight(x, z);
+
+    const wall = new THREE.Mesh(
+        new THREE.BoxGeometry(25, 15, 20),
+        new THREE.MeshStandardMaterial({ color: 0xebdcc1, roughness: 0.9 })
+    );
+    wall.position.y = 7.5;
+    wall.castShadow = true;
+    wall.receiveShadow = true;
+    group.add(wall);
+
+    const roof = new THREE.Mesh(
+        new THREE.ConeGeometry(18, 12, 4),
+        new THREE.MeshStandardMaterial({ color: 0x8a3a2a, roughness: 0.8 })
+    );
+    roof.position.y = 18;
+    roof.rotation.y = Math.PI / 4;
+    roof.castShadow = true;
+    group.add(roof);
+
+    group.position.set(x, y - 10, z);
+    group.rotation.y = rot;
+    return group;
+}
+
+scene.add(createHouse(-160, 400, 0.2));
+scene.add(createHouse(900, 1200, -0.4));
+scene.add(createHouse(1400, 600, 0.8));
+scene.add(createHouse(-1000, -1000, 0.6));
+scene.add(createHouse(1800, -800, 0.3));
+
+// ============================================
+// СОЗДАНИЕ ВРАЖЕСКОГО БПЛА
+// ============================================
+const enemyDrone = new THREE.Group();
+
+const droneBody = new THREE.Mesh(
+    new THREE.BoxGeometry(4, 1, 4),
+    new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.5, metalness: 0.5 })
+);
+enemyDrone.add(droneBody);
+
+for (let i = 0; i < 4; i++) {
+    const arm = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.2, 0.2, 3, 8),
+        new THREE.MeshStandardMaterial({ color: 0x222222 })
+    );
+    arm.rotation.z = Math.PI / 2;
+    const angle = (i * Math.PI / 2) + Math.PI / 4;
+    arm.position.set(Math.cos(angle) * 2, 0, Math.sin(angle) * 2);
+    enemyDrone.add(arm);
+
+    const prop = new THREE.Mesh(
+        new THREE.TorusGeometry(1, 0.05, 4, 12),
+        new THREE.MeshStandardMaterial({ color: 0x666666 })
+    );
+    prop.rotation.x = Math.PI / 2;
+    prop.position.set(Math.cos(angle) * 2, 0.5, Math.sin(angle) * 2);
+    prop.userData.isPropeller = true;
+    enemyDrone.add(prop);
+}
+
+const antenna = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.1, 0.1, 1.5, 6),
+    new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 0.3 })
+);
+antenna.position.y = 1.5;
+enemyDrone.add(antenna);
+
+const heatGlow = new THREE.PointLight(0xff5500, 0.5, 30);
+heatGlow.position.y = 0;
+enemyDrone.add(heatGlow);
+
+const possiblePositions = [
+    { x: -800, z: -600 }, { x: 1200, z: -800 },
+    { x: -400, z: 1000 }, { x: 1600, z: 400 },
+    { x: -1200, z: 200 }, { x: 600, z: -1200 },
+    { x: 1000, z: 1400 }, { x: -1400, z: -1000 }
+];
+const startPos = possiblePositions[Math.floor(Math.random() * possiblePositions.length)];
+const enemyY = getTerrainHeight(startPos.x, startPos.z) - 10 + 3;
+enemyDrone.position.set(startPos.x, enemyY, startPos.z);
+game.droneBaseY = enemyY;
+game.droneStartPos = { x: startPos.x, z: startPos.z };
+scene.add(enemyDrone);
+
+const enemyHitbox = new THREE.Mesh(
+    new THREE.SphereGeometry(5, 8, 8),
+    new THREE.MeshBasicMaterial({ visible: false })
+);
+enemyHitbox.position.copy(enemyDrone.position);
+scene.add(enemyHitbox);
+
+// ============================================
+// КАМЕРА
+// ============================================
+let cameraTheta = 0;
+let cameraPhi = Math.PI / 3.5;
+let cameraRadius = 800;
+const cameraTarget = new THREE.Vector3(0, 0, 0);
+
+function updateCamera() {
+    camera.position.x = cameraTarget.x + cameraRadius * Math.sin(cameraPhi) * Math.sin(cameraTheta);
+    camera.position.y = cameraTarget.y + cameraRadius * Math.cos(cameraPhi);
+    camera.position.z = cameraTarget.z + cameraRadius * Math.sin(cameraPhi) * Math.cos(cameraTheta);
+    
+    const minY = getTerrainHeight(camera.position.x, camera.position.z) + 20;
+    const maxY = 300;
+    camera.position.y = Math.max(minY, Math.min(maxY, camera.position.y));
+    
+    camera.lookAt(cameraTarget);
+}
+updateCamera();
+
+let isMouseDown = false;
+let prevMousePos = { x: 0, y: 0 };
+const keys = {};
+
+// ============================================
+// ОБРАБОТЧИКИ СОБЫТИЙ
+// ============================================
+document.addEventListener('mousedown', (e) => {
+    if (!game.running) return;
+    if (e.button === 0) {
+        isMouseDown = true;
+        prevMousePos = { x: e.clientX, y: e.clientY };
+    } else if (e.button === 2) {
+        game.isLockButtonPressed = true;
+        e.preventDefault();
+    }
+});
+
+document.addEventListener('mouseup', (e) => {
+    if (e.button === 0) isMouseDown = false;
+    if (e.button === 2) game.isLockButtonPressed = false;
+});
+
+document.addEventListener('contextmenu', (e) => { e.preventDefault(); });
+
+document.addEventListener('mousemove', (e) => {
+    if (!game.running || game.paused) return;
+    if (isMouseDown) {
+        const deltaX = e.clientX - prevMousePos.x;
+        const deltaY = e.clientY - prevMousePos.y;
+        prevMousePos = { x: e.clientX, y: e.clientY };
+        cameraTheta -= deltaX * 0.005;
+        cameraPhi = Math.max(0.2, Math.min(Math.PI / 2 - 0.05, cameraPhi - deltaY * 0.005));
+        updateCamera();
+    }
+});
+
+document.addEventListener('wheel', (e) => {
+    if (!game.running) return;
+    e.preventDefault();
+    cameraRadius = Math.max(200, Math.min(1500, cameraRadius + e.deltaY * 1));
+    updateCamera();
+}, { passive: false });
+
+document.addEventListener('keydown', (e) => {
+    const key = e.key.toLowerCase();
+    keys[key] = true;
+    
+    if (e.key === 'Shift') { keys['shift'] = true; e.preventDefault(); }
+    if (e.key === 'Control') { keys['ctrl'] = true; e.preventDefault(); }
+    
+    if (!game.running) return;
+    
+    if (e.code === 'Space') {
+        e.preventDefault();
+        if (game.thermalCharge > 0) {
+            game.thermalActive = true;
+            DOM.thermalOverlay.classList.add('active');
+            SoundSystem.playThermal(true);
+        }
+    }
+    
+    if (key === 'e' && game.detectorReady) activateDetector();
+    if (key === 'q') {
+        game.zoom = Math.min(4.0, game.zoom + 0.2);
+        camera.fov = 45 / game.zoom;
+        camera.updateProjectionMatrix();
+        SoundSystem.playClick();
+    }
+    if (key === 'z') {
+        game.zoom = Math.max(1.0, game.zoom - 0.2);
+        camera.fov = 45 / game.zoom;
+        camera.updateProjectionMatrix();
+        SoundSystem.playClick();
+    }
+    if (key === 'p') game.paused = !game.paused;
+    if (key === 'f') game.isLockButtonPressed = true;
+    if (key === 't' && game.targetCaptured) transmitCoordinates();
+    if (key === 'r') location.reload();
+    if (key === 'm') { SoundSystem.init(); SoundSystem.toggleMute(); }
+    if (key === 'n') document.getElementById('musicToggle').click();
+});
+
+document.addEventListener('keyup', (e) => {
+    const key = e.key.toLowerCase();
+    keys[key] = false;
+    if (e.key === 'Shift') keys['shift'] = false;
+    if (e.key === 'Control') keys['ctrl'] = false;
+    if (e.code === 'Space') {
+        game.thermalActive = false;
+        DOM.thermalOverlay.classList.remove('active');
+        SoundSystem.playThermal(false);
+    }
+    if (key === 'f') game.isLockButtonPressed = false;
+});
+
+// ============================================
+// TOUCH-СОБЫТИЯ
+// ============================================
+let touchStartPos = null;
+let lastTouchPos = null;
+
+canvas.addEventListener('touchstart', (e) => {
+    if (!game.running) return;
+    e.preventDefault();
+    if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        touchStartPos = { x: touch.clientX, y: touch.clientY };
+        lastTouchPos = { x: touch.clientX, y: touch.clientY };
+    }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+    if (!game.running || game.paused) return;
+    e.preventDefault();
+    if (e.touches.length === 1 && lastTouchPos) {
+        const touch = e.touches[0];
+        const deltaX = touch.clientX - lastTouchPos.x;
+        const deltaY = touch.clientY - lastTouchPos.y;
+        lastTouchPos = { x: touch.clientX, y: touch.clientY };
+        cameraTheta -= deltaX * 0.008;
+        cameraPhi = Math.max(0.2, Math.min(Math.PI / 2 - 0.05, cameraPhi - deltaY * 0.008));
+        updateCamera();
+    } else if (e.touches.length === 2) {
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        const dist = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+        if (game.lastPinchDist) {
+            const delta = game.lastPinchDist - dist;
+            cameraRadius = Math.max(200, Math.min(1500, cameraRadius + delta * 2));
+            updateCamera();
+        }
+        game.lastPinchDist = dist;
+    }
+}, { passive: false });
+
+canvas.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    touchStartPos = null;
+    lastTouchPos = null;
+    game.lastPinchDist = null;
+}, { passive: false });
+
+// ============================================
+// ВИРТУАЛЬНЫЙ ДЖОЙСТИК
+// ============================================
+const joystickContainer = document.getElementById('joystickContainer');
+const joystickStick = document.getElementById('joystickStick');
+let joystickTouchId = null;
+const joystickMaxDistance = 40;
+
+joystickContainer.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const touch = e.changedTouches[0];
+    joystickTouchId = touch.identifier;
+    game.isJoystickActive = true;
+    updateJoystick(touch);
+}, { passive: false });
+
+joystickContainer.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        if (touch.identifier === joystickTouchId) updateJoystick(touch);
+    }
+}, { passive: false });
+
+joystickContainer.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        if (touch.identifier === joystickTouchId) {
+            joystickTouchId = null;
+            game.isJoystickActive = false;
+            game.joystickX = 0;
+            game.joystickY = 0;
+            joystickStick.style.transform = 'translate(-50%, -50%)';
+        }
+    }
+}, { passive: false });
+
+function updateJoystick(touch) {
+    const rect = joystickContainer.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    let deltaX = touch.clientX - centerX;
+    let deltaY = touch.clientY - centerY;
+    const distance = Math.hypot(deltaX, deltaY);
+    if (distance > joystickMaxDistance) {
+        deltaX = (deltaX / distance) * joystickMaxDistance;
+        deltaY = (deltaY / distance) * joystickMaxDistance;
+    }
+    game.joystickX = deltaX / joystickMaxDistance;
+    game.joystickY = deltaY / joystickMaxDistance;
+    joystickStick.style.transform = `translate(calc(-50% + ${deltaX}px), calc(-50% + ${deltaY}px))`;
+}
+
+// ============================================
+// СЕНСОРНЫЕ КНОПКИ
+// ============================================
+const btnThermal = document.getElementById('btnThermal');
+btnThermal.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (game.thermalCharge > 0) {
+        game.thermalActive = true;
+        game.isThermalButtonPressed = true;
+        DOM.thermalOverlay.classList.add('active');
+        btnThermal.classList.add('active-state');
+        SoundSystem.playThermal(true);
+    }
+}, { passive: false });
+
+btnThermal.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    game.thermalActive = false;
+    game.isThermalButtonPressed = false;
+    DOM.thermalOverlay.classList.remove('active');
+    btnThermal.classList.remove('active-state');
+    SoundSystem.playThermal(false);
+}, { passive: false });
+
+const btnLock = document.getElementById('btnLock');
+btnLock.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    game.isLockButtonPressed = true;
+    btnLock.classList.add('active-state');
+}, { passive: false });
+
+btnLock.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    game.isLockButtonPressed = false;
+    btnLock.classList.remove('active-state');
+}, { passive: false });
+
+const btnDetector = document.getElementById('btnDetector');
+btnDetector.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (game.detectorReady) {
+        activateDetector();
+        btnDetector.classList.add('active-state');
+        setTimeout(() => btnDetector.classList.remove('active-state'), 300);
+    }
+}, { passive: false });
+
+const btnTransmit = document.getElementById('btnTransmit');
+btnTransmit.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (game.targetCaptured) {
+        transmitCoordinates();
+        btnTransmit.classList.add('active-state');
+        setTimeout(() => btnTransmit.classList.remove('active-state'), 300);
+    }
+}, { passive: false });
+
+const btnUp = document.getElementById('btnUp');
+const btnDown = document.getElementById('btnDown');
+
+btnUp.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); game.isUpButtonPressed = true; }, { passive: false });
+btnUp.addEventListener('touchend', (e) => { e.preventDefault(); e.stopPropagation(); game.isUpButtonPressed = false; }, { passive: false });
+btnDown.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); game.isDownButtonPressed = true; }, { passive: false });
+btnDown.addEventListener('touchend', (e) => { e.preventDefault(); e.stopPropagation(); game.isDownButtonPressed = false; }, { passive: false });
+
+// ============================================
+// ФУНКЦИИ ВЕТРА
+// ============================================
+function updateWind(delta) {
+    game.wind.gustTimer += delta * 1000;
+    
+    if (game.wind.gustTimer >= game.wind.nextGust) {
+        game.wind.direction = Math.random() * Math.PI * 2;
+        game.wind.strength = Math.random() * game.wind.maxStrength;
+        game.wind.x = Math.cos(game.wind.direction) * game.wind.strength;
+        game.wind.z = Math.sin(game.wind.direction) * game.wind.strength;
+        game.wind.gustTimer = 0;
+        game.wind.nextGust = 2000 + Math.random() * 4000;
+        updateWindIndicator();
+        SoundSystem.playWindGust(game.wind.strength);
+    }
+    
+    game.wind.strength *= 0.995;
+    game.wind.x = Math.cos(game.wind.direction) * game.wind.strength;
+    game.wind.z = Math.sin(game.wind.direction) * game.wind.strength;
+    SoundSystem.updateWindVolume(game.wind.strength);
+}
+
+function updateWindIndicator() {
+    const degrees = (game.wind.direction * 180 / Math.PI + 90) % 360;
+    DOM.windArrow.style.transform = `rotate(${degrees}deg)`;
+    const ms = (game.wind.strength * 10).toFixed(1);
+    DOM.windStrength.textContent = ms + ' м/с';
+    if (game.wind.strength > 0.5) DOM.windStrength.style.color = 'var(--accent-red)';
+    else if (game.wind.strength > 0.3) DOM.windStrength.style.color = 'var(--accent-orange)';
+    else DOM.windStrength.style.color = 'var(--accent-green)';
+}
+
+// ============================================
+// ФУНКЦИИ ИГРЫ
+// ============================================
+function activateDetector() {
+    game.detectorReady = false;
+    game.detectorCooldown = 180;
+    DOM.warning.style.display = 'block';
+    setTimeout(() => DOM.warning.style.display = 'none', 2000);
+    SoundSystem.playDetector();
+}
+
+function transmitCoordinates() {
+    if (game.coordsTransmitted) return;
+    game.coordsTransmitted = true;
+    DOM.coordNotification.style.display = 'block';
+    SoundSystem.playTransmit();
+    setTimeout(() => {
+        DOM.coordNotification.style.display = 'none';
+        winGame();
+    }, 2000);
+}
+
+// ============================================
+// МИНИКАРТА
+// ============================================
+const minimapCanvas = document.getElementById('minimapCanvas');
+const minimapCtx = minimapCanvas.getContext('2d');
+let minimapDirty = true;
+let lastMinimapUpdate = 0;
+
+function drawMinimap() {
+    const now = performance.now();
+    if (now - lastMinimapUpdate < 100) return; // Обновляем раз в 100мс
+    lastMinimapUpdate = now;
+    
+    minimapCtx.clearRect(0, 0, 150, 150);
+    minimapCtx.fillStyle = '#4c8033';
+    minimapCtx.fillRect(0, 0, 150, 150);
+    minimapCtx.fillStyle = '#b58552';
+    minimapCtx.beginPath();
+    minimapCtx.moveTo(50, 80);
+    minimapCtx.lineTo(110, 70);
+    minimapCtx.lineTo(130, 120);
+    minimapCtx.lineTo(70, 130);
+    minimapCtx.closePath();
+    minimapCtx.fill();
+    minimapCtx.fillStyle = '#fabd16';
+    minimapCtx.fillRect(10, 25, 60, 40);
+    minimapCtx.strokeStyle = '#e0cfb3';
+    minimapCtx.lineWidth = 2;
+    minimapCtx.beginPath();
+    minimapCtx.moveTo(75, 0);
+    minimapCtx.lineTo(130, 140);
+    minimapCtx.stroke();
+    
+    const scale = 150 / 5000;
+    const offset = 75;
+    const camMapX = offset + camera.position.x * scale;
+    const camMapZ = offset + camera.position.z * scale;
+    
+    minimapCtx.fillStyle = '#38bdf8';
+    minimapCtx.beginPath();
+    minimapCtx.arc(camMapX, camMapZ, 3, 0, Math.PI * 2);
+    minimapCtx.fill();
+    minimapCtx.strokeStyle = '#ffffff';
+    minimapCtx.lineWidth = 1;
+    minimapCtx.stroke();
+    
+    const lookDir = new THREE.Vector3();
+    camera.getWorldDirection(lookDir);
+    minimapCtx.strokeStyle = '#38bdf8';
+    minimapCtx.lineWidth = 2;
+    minimapCtx.beginPath();
+    minimapCtx.moveTo(camMapX, camMapZ);
+    minimapCtx.lineTo(camMapX + lookDir.x * 12, camMapZ + lookDir.z * 12);
+    minimapCtx.stroke();
+    
+    if (game.droneVisible) {
+        const enemyMapX = offset + enemyDrone.position.x * scale;
+        const enemyMapZ = offset + enemyDrone.position.z * scale;
+        minimapCtx.fillStyle = game.targetCaptured ? '#22c55e' : '#ef4444';
+        minimapCtx.beginPath();
+        minimapCtx.arc(enemyMapX, enemyMapZ, 3, 0, Math.PI * 2);
+        minimapCtx.fill();
+        if (game.targetCaptured) {
+            minimapCtx.strokeStyle = '#22c55e';
+            minimapCtx.lineWidth = 1;
+            minimapCtx.stroke();
+        }
+    }
+}
+
+// ============================================
+// RAYCASTER
+// ============================================
+const raycaster = new THREE.Raycaster();
+const screenCenter = new THREE.Vector2(0, 0);
+
+function checkEnemyInView() {
+    if (!game.droneVisible) return false;
+    raycaster.setFromCamera(screenCenter, camera);
+    const intersects = raycaster.intersectObject(enemyHitbox);
+    return intersects.length > 0;
+}
+
+function updateEnemyIndicator() {
+    const dx = camera.position.x - enemyDrone.position.x;
+    const dz = camera.position.z - enemyDrone.position.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    
+    if (dist < 500 && game.droneVisible && !game.targetCaptured && !game.coordsTransmitted) {
+        DOM.enemyIndicator.style.display = 'block';
+        game.enemyFound = true;
+    } else {
+        DOM.enemyIndicator.style.display = 'none';
+    }
+}
+
+// ============================================
+// ОСНОВНОЙ ЦИКЛ
+// ============================================
+let lastLockSoundTime = 0;
+
+function update() {
+    if (!game.running || game.paused) return;
+    
+    const now = performance.now();
+    const delta = Math.min((now - game.lastFrame) / 1000, 0.1); // Ограничиваем delta
+    game.lastFrame = now;
+    
+    game.time -= delta;
+    if (game.time <= 0) {
+        game.running = false;
+        DOM.loseModal.classList.add('active');
+        SoundSystem.playDefeat();
+        SoundSystem.stopWindLoop();
+        if (musicPlaying) bgMusic.volume = 0.1;
+        return;
+    }
+    
+    updateWind(delta);
+    
+    game.droneTimer -= delta;
+    
+    if (game.droneTimer <= 0) {
+        game.droneTimer = 15;
+        game.droneVisible = !game.droneVisible;
+        game.droneCycle = game.droneVisible ? 0 : 1;
+        enemyDrone.visible = game.droneVisible;
+        enemyHitbox.visible = game.droneVisible;
+        
+        if (game.droneVisible) {
+            const y = getTerrainHeight(game.droneStartPos.x, game.droneStartPos.z) - 10 + 3;
+            enemyDrone.position.y = y;
+            enemyHitbox.position.y = y;
+            game.droneBaseY = y;
+            game.targetCaptured = false;
+            game.lockProgress = 0;
+            DOM.lockRing.classList.remove('active');
+            DOM.lockStatus.textContent = '—';
+            DOM.droneState.textContent = '🟢 АКТИВЕН';
+            DOM.droneState.style.color = 'var(--accent-green)';
+            SoundSystem.playDroneAppear();
+        } else {
+            enemyDrone.position.y = -50;
+            enemyHitbox.position.y = -50;
+            DOM.droneState.textContent = '🔴 СКРЫТ';
+            DOM.droneState.style.color = 'var(--accent-red)';
+            DOM.enemyIndicator.style.display = 'none';
+        }
+    }
+    
+    DOM.droneCountdown.textContent = Math.max(0, Math.ceil(game.droneTimer));
+    DOM.droneStatus.classList.add('active');
+    
+    const moveSpeed = 100 * delta;
+    const forward = new THREE.Vector3();
+    camera.getWorldDirection(forward);
+    forward.y = 0;
+    forward.normalize();
+    
+    const right = new THREE.Vector3();
+    right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+    
+    let moveX = 0;
+    let moveZ = 0;
+    
+    if (keys['w'] || keys['arrowup']) moveZ -= 1;
+    if (keys['s'] || keys['arrowdown']) moveZ += 1;
+    if (keys['d'] || keys['arrowright']) moveX += 1;
+    if (keys['a'] || keys['arrowleft']) moveX -= 1;
+    
+    if (game.isJoystickActive) {
+        moveX += game.joystickX * 1.2;
+        moveZ -= game.joystickY * 1.2;
+    }
+    
+    const moveLen = Math.hypot(moveX, moveZ);
+    if (moveLen > 0) {
+        moveX /= moveLen;
+        moveZ /= moveLen;
+    }
+    
+    const windEffect = 0.3;
+    cameraTarget.x += (moveX * moveSpeed + game.wind.x * windEffect * moveSpeed) * delta * 10;
+    cameraTarget.z += (moveZ * moveSpeed + game.wind.z * windEffect * moveSpeed) * delta * 10;
+    
+    if (keys['shift'] || game.isUpButtonPressed) {
+        cameraTarget.y = Math.min(300, cameraTarget.y + moveSpeed * 1.5);
+    }
+    
+    if (keys['ctrl'] || game.isDownButtonPressed) {
+        const minY = getTerrainHeight(cameraTarget.x, cameraTarget.z) + 20;
+        cameraTarget.y = Math.max(minY, cameraTarget.y - moveSpeed * 1.5);
+    }
+    
+    cameraTarget.x = Math.max(-2400, Math.min(2400, cameraTarget.x));
+    cameraTarget.z = Math.max(-2400, Math.min(2400, cameraTarget.z));
+    
+    updateCamera();
+    
+    if (game.droneVisible) {
+        enemyDrone.position.x += game.wind.x * 0.5;
+        enemyDrone.position.z += game.wind.z * 0.5;
+        enemyHitbox.position.copy(enemyDrone.position);
+        enemyDrone.position.x = Math.max(-2400, Math.min(2400, enemyDrone.position.x));
+        enemyDrone.position.z = Math.max(-2400, Math.min(2400, enemyDrone.position.z));
+    }
+    
+    if (game.thermalActive) {
+        game.thermalCharge = Math.max(0, game.thermalCharge - delta * 8);
+        if (game.thermalCharge <= 0) {
+            game.thermalActive = false;
+            DOM.thermalOverlay.classList.remove('active');
+            if (game.isThermalButtonPressed) btnThermal.classList.remove('active-state');
+        }
+    } else {
+        game.thermalCharge = Math.min(100, game.thermalCharge + delta * 8);
+    }
+    
+    if (!game.detectorReady) {
+        game.detectorCooldown -= delta * 60;
+        if (game.detectorCooldown <= 0) {
+            game.detectorReady = true;
+            game.detectorCooldown = 0;
+        }
+    }
+    
+    const inView = checkEnemyInView();
+    
+    if (game.isLockButtonPressed && inView && game.droneVisible && !game.targetCaptured && !game.coordsTransmitted) {
+        game.isLocking = true;
+        game.lockProgress = Math.min(100, game.lockProgress + delta * 40);
+        DOM.lockRing.classList.add('active');
+        
+        if (now - lastLockSoundTime > 500) {
+            SoundSystem.playLockStart();
+            lastLockSoundTime = now;
+        }
+        
+        if (game.lockProgress >= 100) {
+            game.targetCaptured = true;
+            game.isLocking = false;
+            game.enemyFound = true;
+            DOM.controlHint.textContent = '✅ ЦЕЛЬ ЗАХВАЧЕНА! Нажмите T или 📤 для передачи координат';
+            DOM.controlHint.classList.add('show');
+            setTimeout(() => DOM.controlHint.classList.remove('show'), 4000);
+            SoundSystem.playLockComplete();
+            if (isMobile && navigator.vibrate) navigator.vibrate(100);
+        }
+    } else if (!game.isLockButtonPressed || !inView || !game.droneVisible) {
+        game.isLocking = false;
+        if (!game.targetCaptured) {
+            game.lockProgress = Math.max(0, game.lockProgress - delta * 20);
+            if (game.lockProgress <= 0) DOM.lockRing.classList.remove('active');
+        }
+    }
+    
+    enemyDrone.children.forEach(child => {
+        if (child.userData.isPropeller) child.rotation.z += delta * 20;
+    });
+    
+    updateUI(inView);
+    updateEnemyIndicator();
+}
+
+// ============================================
+// ОБНОВЛЕНИЕ UI
+// ============================================
+function updateUI(inView) {
+    const minutes = Math.floor(Math.max(0, game.time) / 60);
+    const seconds = Math.floor(Math.max(0, game.time) % 60);
+    DOM.timer.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    
+    game.score = Math.floor((300 - game.time) * 10) + (game.enemyFound ? 500 : 0) + (game.targetCaptured ? 1000 : 0);
+    DOM.score.textContent = game.score;
+    DOM.altitude.textContent = Math.floor(camera.position.y) + ' м';
+    DOM.coordX.textContent = Math.floor(camera.position.x);
+    DOM.coordZ.textContent = Math.floor(camera.position.z);
+    
+    const heading = ((cameraTheta * 180 / Math.PI) % 360 + 360) % 360;
+    DOM.heading.textContent = Math.floor(heading).toString().padStart(3, '0') + '°';
+    DOM.compass.textContent = getCompassDir(heading) + ' ' + Math.floor(heading).toString().padStart(3, '0') + '°';
+    
+    DOM.thermal.textContent = Math.floor(game.thermalCharge) + '%';
+    DOM.thermal.className = 'hud-value ' + (game.thermalCharge < 30 ? 'red' : 'orange');
+    
+    if (game.detectorReady) {
+        DOM.detector.textContent = 'ГОТОВ';
+        DOM.detector.className = 'hud-value green';
+    } else {
+        DOM.detector.textContent = Math.ceil(game.detectorCooldown / 60) + 'с';
+        DOM.detector.className = 'hud-value orange';
+    }
+    
+    DOM.zoom.textContent = game.zoom.toFixed(1) + 'x';
+    
+    if (game.coordsTransmitted) {
+        DOM.lockStatus.textContent = '✓ ПЕРЕДАНО';
+        DOM.lockStatus.className = 'hud-value gold';
+    } else if (game.targetCaptured) {
+        DOM.lockStatus.textContent = '✓ ЗАХВАЧЕНА';
+        DOM.lockStatus.className = 'hud-value green';
+    } else if (game.isLocking) {
+        DOM.lockStatus.textContent = Math.floor(game.lockProgress) + '%';
+        DOM.lockStatus.className = 'hud-value red';
+    } else {
+        DOM.lockStatus.textContent = '—';
+    }
+    
+    if (game.lockProgress > 0) {
+        const circumference = 2 * Math.PI * 45;
+        DOM.lockCircle.style.strokeDasharray = circumference;
+        DOM.lockCircle.style.strokeDashoffset = circumference - (game.lockProgress / 100) * circumference;
+    }
+    
+    const dx = camera.position.x - enemyDrone.position.x;
+    const dz = camera.position.z - enemyDrone.position.z;
+    const distToEnemy = Math.sqrt(dx * dx + dz * dz);
+    
+    let signalStrength = 0;
+    if (game.droneVisible) {
+        signalStrength = Math.max(0, Math.min(100, 100 - (distToEnemy / 25)));
+    }
+    DOM.signalFill.style.width = signalStrength + '%';
+    
+    if (game.coordsTransmitted) {
+        DOM.signalText.textContent = '✅ ПЕРЕДАНО НА КП';
+        DOM.signalText.style.color = 'var(--accent-green)';
+    } else if (game.targetCaptured) {
+        DOM.signalText.textContent = '🎯 ЦЕЛЬ ЗАХВАЧЕНА! Нажмите T или 📤';
+        DOM.signalText.style.color = 'var(--accent-gold)';
+    } else if (!game.droneVisible) {
+        DOM.signalText.textContent = '🔴 БПЛА СКРЫТ';
+        DOM.signalText.style.color = 'var(--accent-red)';
+    } else if (inView && game.zoom >= 2) {
+        DOM.signalText.textContent = '🎯 ЦЕЛЬ В ПРИЦЕЛЕ! (F или 🎯)';
+        DOM.signalText.style.color = 'var(--accent-red)';
+    } else if (signalStrength > 70) {
+        DOM.signalText.textContent = 'СИЛЬНЫЙ';
+        DOM.signalText.style.color = 'var(--accent-red)';
+    } else if (signalStrength > 40) {
+        DOM.signalText.textContent = 'СРЕДНИЙ';
+        DOM.signalText.style.color = 'var(--accent-orange)';
+    } else if (signalStrength > 10) {
+        DOM.signalText.textContent = 'СЛАБЫЙ';
+        DOM.signalText.style.color = 'var(--accent-green)';
+    } else {
+        DOM.signalText.textContent = 'НЕ ОБНАРУЖЕН';
+        DOM.signalText.style.color = 'var(--text-secondary)';
+    }
+}
+
+function getCompassDir(deg) {
+    const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    return dirs[Math.floor(((deg + 22.5) % 360) / 45)];
+}
+
+// ============================================
+// ПОБЕДА / ПОРАЖЕНИЕ
+// ============================================
+function winGame() {
+    if (!game.running) return; // ИСПРАВЛЕНО: было game.running === false
+    
+    game.running = false;
+    const timeUsed = 300 - game.time;
+    const minutes = Math.floor(timeUsed / 60);
+    const seconds = Math.floor(timeUsed % 60);
+    
+    const timeBonus = Math.floor(game.time * 10);
+    const finalScore = game.score + timeBonus + (game.enemyFound ? 500 : 0);
+    
+    let rank = 'РЯДОВОЙ';
+    if (finalScore > 3000) rank = 'СЕРЖАНТ';
+    if (finalScore > 5000) rank = 'ЛЕЙТЕНАНТ';
+    if (finalScore > 7000) rank = 'КАПИТАН';
+    if (finalScore > 10000) rank = 'МАЙОР';
+    
+    DOM.finalTime.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    DOM.finalScore.textContent = finalScore;
+    DOM.finalAccuracy.textContent = '100%';
+    DOM.finalRank.textContent = rank;
+    DOM.winModal.classList.add('active');
+    
+    SoundSystem.playVictory();
+    SoundSystem.stopWindLoop();
+    
+    if (musicPlaying) bgMusic.volume = 0.1;
+    if (isMobile && navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 200]);
+}
+
+// ============================================
+// СТАРТ МИССИИ
+// ============================================
+function startMission() {
+    SoundSystem.init();
+    SoundSystem.startWindLoop();
+    
+    const musicToggle = document.getElementById('musicToggle');
+    if (!musicPlaying) {
+        bgMusic.play().then(() => {
+            musicToggle.textContent = '🎶';
+            musicToggle.classList.add('playing');
+            musicToggle.classList.remove('muted');
+            musicPlaying = true;
+        }).catch(() => console.log('Автозапуск музыки заблокирован браузером'));
+    }
+    
+    DOM.startScreen.style.display = 'none';
+    game.running = true;
+    game.lastFrame = performance.now();
+    
+    game.droneVisible = true;
+    game.droneTimer = 15;
+    game.droneCycle = 0;
+    enemyDrone.visible = true;
+    enemyHitbox.visible = true;
+    
+    const y = getTerrainHeight(game.droneStartPos.x, game.droneStartPos.z) - 10 + 3;
+    enemyDrone.position.y = y;
+    enemyHitbox.position.y = y;
+    game.droneBaseY = y;
+    
+    DOM.droneState.textContent = '🟢 АКТИВЕН';
+    DOM.droneState.style.color = 'var(--accent-green)';
+    DOM.droneStatus.classList.add('active');
+    
+    if (isMobile) {
+        DOM.controlHint.textContent = '📱 Джойстик — движение | 🎯 — захват | 📤 — передать';
+    } else {
+        DOM.controlHint.textContent = '🖱️ WASD — движение | F — захват | T — передать | 💨 Учитывайте ветер!';
+    }
+    DOM.controlHint.classList.add('show');
+    setTimeout(() => DOM.controlHint.classList.remove('show'), 5000);
+    
+    SoundSystem.playDroneAppear();
+}
+
+document.getElementById('startBtn').addEventListener('click', startMission);
+document.getElementById('restartBtn1').addEventListener('click', () => location.reload());
+document.getElementById('restartBtn2').addEventListener('click', () => location.reload());
+
+// ============================================
+// АНИМАЦИОННЫЙ ЦИКЛ
+// ============================================
+function animate() {
+    requestAnimationFrame(animate);
+    update();
+    if (game.running) drawMinimap();
+    if (renderer && scene && camera) renderer.render(scene, camera);
+}
+animate();
+
+let resizeTimeout;
+window.addEventListener('resize', () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+        if (camera && renderer) {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    }, 100);
+});
+
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+document.addEventListener('gesturechange', (e) => e.preventDefault());
+document.addEventListener('gestureend', (e) => e.preventDefault());
+
+// Очистка при закрытии страницы
+window.addEventListener('beforeunload', () => {
+    SoundSystem.destroy();
+});
+</script>
+
+</body>
+</html>
