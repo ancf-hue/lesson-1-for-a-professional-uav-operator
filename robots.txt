@@ -1,0 +1,218 @@
+# robots.txt для проекта "Урок 1: Обнаружение вражеского БПЛА"
+# Оптимизирован для надежной работы без зависаний
+
+# ============================================
+# ГЛАВНЫЕ ПРАВИЛА
+# ============================================
+
+# Разрешаем всем поисковым системам
+User-agent: *
+
+# Разрешаем индексацию
+Allow: /
+
+# ============================================
+# ЗАПРЕЩЕННЫЕ ПУТИ
+# ============================================
+
+# Запрещаем индексацию служебных файлов
+Disallow: /*.json$
+Disallow: /*.map$
+Disallow: /node_modules/
+Disallow: /.git/
+Disallow: /.vercel/
+Disallow: /api/
+Disallow: /_next/
+Disallow: /*?*
+
+# Запрещаем индексацию временных файлов
+Disallow: /*.tmp$
+Disallow: /*.temp$
+Disallow: /*.bak$
+
+# ============================================
+# ОСНОВНЫЕ ПОИСКОВЫЕ СИСТЕМЫ
+# ============================================
+
+# Google
+User-agent: Googlebot
+Allow: /
+Crawl-delay: 1
+
+# Google Images
+User-agent: Googlebot-Image
+Allow: /
+Crawl-delay: 2
+
+# Google Mobile
+User-agent: Googlebot-Mobile
+Allow: /
+Crawl-delay: 1
+
+# Yandex
+User-agent: Yandex
+Allow: /
+Crawl-delay: 1
+
+# Yandex Images
+User-agent: YandexImages
+Allow: /
+Crawl-delay: 2
+
+# Yandex Mobile
+User-agent: YandexMobileBot
+Allow: /
+Crawl-delay: 1
+
+# Bing
+User-agent: bingbot
+Allow: /
+Crawl-delay: 1
+
+# DuckDuckGo
+User-agent: DuckDuckBot
+Allow: /
+Crawl-delay: 2
+
+# Baidu
+User-agent: Baiduspider
+Allow: /
+Crawl-delay: 3
+
+# ============================================
+# БОТЫ ИЗОБРАЖЕНИЙ И СОЦИАЛЬНЫХ СЕТЕЙ
+# ============================================
+
+# Facebook
+User-agent: facebookexternalhit
+Allow: /
+Crawl-delay: 2
+
+# Twitter
+User-agent: Twitterbot
+Allow: /
+Crawl-delay: 2
+
+# LinkedIn
+User-agent: LinkedInBot
+Allow: /
+Crawl-delay: 2
+
+# WhatsApp
+User-agent: WhatsApp
+Allow: /
+Crawl-delay: 2
+
+# Telegram
+User-agent: TelegramBot
+Allow: /
+Crawl-delay: 2
+
+# Pinterest
+User-agent: Pinterest
+Allow: /
+Crawl-delay: 2
+
+# ============================================
+# СЕО БОТЫ И АНАЛИТИКА
+# ============================================
+
+# Ahrefs
+User-agent: AhrefsBot
+Allow: /
+Crawl-delay: 3
+
+# SEMrush
+User-agent: SemrushBot
+Allow: /
+Crawl-delay: 3
+
+# Moz
+User-agent: rogerbot
+Allow: /
+Crawl-delay: 3
+
+# Majestic
+User-agent: MJ12bot
+Allow: /
+Crawl-delay: 3
+
+# ============================================
+# ЗАЩИТА ОТ СПАМА И ЗЛОУПОТРЕБЛЕНИЙ
+# ============================================
+
+# Запрещаем агрессивных ботов
+User-agent: *
+Disallow: /admin/
+Disallow: /wp-admin/
+Disallow: /wp-login.php
+Disallow: /xmlrpc.php
+Disallow: /cgi-bin/
+Disallow: /scripts/
+
+# ============================================
+# НАСТРОЙКИ КЭШИРОВАНИЯ
+# ============================================
+
+# Время жизни кэша для ботов (в секундах)
+Crawl-delay: 2
+
+# ============================================
+# SITEMAP
+# ============================================
+
+# Указываем расположение sitemap
+Sitemap: https://lesson-1-for-a-professional-uav-ope.vercel.app/sitemap.xml
+
+# Зеркало на GitHub Pages
+Sitemap: https://ancf-hue.github.io/sitemap.xml
+
+# ============================================
+# ДОПОЛНИТЕЛЬНЫЕ НАСТРОЙКИ
+# ============================================
+
+# Разрешаем доступ к основным ресурсам
+Allow: /index.html
+Allow: /favicon.ico
+Allow: /*.jpg$
+Allow: /*.jpeg$
+Allow: /*.png$
+Allow: /*.gif$
+Allow: /*.webp$
+Allow: /*.svg$
+Allow: /*.mp3$
+Allow: /*.ico$
+
+# ============================================
+# БЕЗОПАСНОСТЬ
+# ============================================
+
+# Запрещаем доступ к конфигурационным файлам
+Disallow: /.env
+Disallow: /.env.local
+Disallow: /.env.production
+Disallow: /config.json
+Disallow: /package.json
+Disallow: /composer.json
+
+# ============================================
+# ОПТИМИЗАЦИЯ НАГРУЗКИ
+# ============================================
+
+# Ограничиваем частоту запросов для предотвращения DDOS
+# Crawl-delay уже указан выше для каждого бота
+
+# ============================================
+# КОНТАКТНАЯ ИНФОРМАЦИЯ
+# ============================================
+
+# Для вопросов по индексации:
+# Email: an.cf@yandex.ru
+# GitHub: https://github.com/ancf-hue
+
+# ============================================
+# ПОСЛЕДНЕЕ ОБНОВЛЕНИЕ
+# ============================================
+# Дата: 2026-07-05
+# Версия: 1.0
+# Автор: Кузнецов Антон Анатольевич
